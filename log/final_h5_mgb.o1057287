@@ -1,0 +1,144 @@
+
+
+/wynton/home/leng/alice-albrecht/.conda/envs/env_sleep_py310/lib/python3.10/site-packages/nolds/datasets.py:9: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+[INFO] Loading existing mastersheet from /wynton/group/andrews/data/PSG_Pipeline_Outputs/mastersheets/hsp_mgb_mastersheet.csv
+81 subjects with less than 3h of recording:
+25 subjects missing h5: ['S0001111189359', 'S0001111197789', 'S0001111200447', 'S0001111832609', 'S0001113559394', 'S0001114111895', 'S0001114925101', 'S0001116283767', 'S0001116283767', 'S0001116639282', 'S0001117385750', 'S0001117494823', 'S0001117563796', 'S0001117563796', 'S0001117570190', 'S0001117882511', 'S0001118809002', 'S0001120767287', 'S0001121555968', 'S0001121556135', 'S0001121557120', 'S0001121557972', 'S0001121558575', 'S0001121582430', 'S0001121903400']
+[INFO] Converting 25 EDF files in parallel with 16 workers
+    No EMG_LEG channels found for subject sub-S0001117563796_ses-2
+    No POSITION channels found for subject sub-S0001117563796_ses-2
+    No HR_DERIVATED channels found for subject sub-S0001117563796_ses-2
+E and M
+E and M
+SNORE and E
+IC and E
+    [ERROR] Cannot uniquely identify left/right in EOG channels ['E1-M2', 'E2-M1', 'SNORE-E1', 'IC-E1'] for subject sub-S0001117563796_ses-2
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001117563796_ses-2
+    No EMG_LEG channels found for subject sub-S0001111200447_ses-1
+    No POSITION channels found for subject sub-S0001111200447_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001111200447_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001111200447_ses-1
+    No EMG_LEG channels found for subject sub-S0001111832609_ses-1
+    No POSITION channels found for subject sub-S0001111832609_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001111832609_ses-1
+E and M
+E and M
+SNORE and E
+IC and E
+    [ERROR] Cannot uniquely identify left/right in EOG channels ['E1-M2', 'E2-M2', 'SNORE-E1', 'IC-E1'] for subject sub-S0001111832609_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001111832609_ses-1
+    No EMG_LEG channels found for subject sub-S0001117570190_ses-1
+    No POSITION channels found for subject sub-S0001117570190_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001117570190_ses-1
+E and M
+E and M
+SNORE and E
+IC and E
+    [ERROR] Cannot uniquely identify left/right in EOG channels ['E1-M2', 'E2-M2', 'SNORE-E1', 'IC-E1'] for subject sub-S0001117570190_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001117570190_ses-1
+    No EMG_LEG channels found for subject sub-S0001113559394_ses-1
+    No POSITION channels found for subject sub-S0001113559394_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001113559394_ses-1
+E and M
+E and M
+SNORE and E
+IC and E
+    [ERROR] Cannot uniquely identify left/right in EOG channels ['E1-M2', 'E2-M2', 'SNORE-E1', 'IC-E1'] for subject sub-S0001113559394_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001113559394_ses-1
+    No ECG channels found for subject sub-S0001117385750_ses-1
+    No EMG_LEG channels found for subject sub-S0001117385750_ses-1
+    No POSITION channels found for subject sub-S0001117385750_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001117385750_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001117385750_ses-1
+    No EMG_LEG channels found for subject sub-S0001118809002_ses-1
+    No POSITION channels found for subject sub-S0001118809002_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001118809002_ses-1
+E and M
+E and M
+SNORE and E
+IC and E
+    [ERROR] Cannot uniquely identify left/right in EOG channels ['E1-M2', 'E2-M2', 'SNORE-E1', 'IC-E1'] for subject sub-S0001118809002_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001118809002_ses-1
+    No ECG channels found for subject sub-S0001114925101_ses-1
+    No EMG_LEG channels found for subject sub-S0001114925101_ses-1
+    No POSITION channels found for subject sub-S0001114925101_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001114925101_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001114925101_ses-1
+    No EMG_LEG channels found for subject sub-S0001111197789_ses-1
+    No POSITION channels found for subject sub-S0001111197789_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001111197789_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001111197789_ses-1
+    No ECG channels found for subject sub-S0001120767287_ses-2
+    No EMG_LEG channels found for subject sub-S0001120767287_ses-2
+    No POSITION channels found for subject sub-S0001120767287_ses-2
+    No HR_DERIVATED channels found for subject sub-S0001120767287_ses-2
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001120767287_ses-2
+    No EMG_LEG channels found for subject sub-S0001117563796_ses-1
+    No POSITION channels found for subject sub-S0001117563796_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001117563796_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001117563796_ses-1
+    No EMG_LEG channels found for subject sub-S0001114111895_ses-1
+    No POSITION channels found for subject sub-S0001114111895_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001114111895_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001114111895_ses-1
+    No EMG_LEG channels found for subject sub-S0001111189359_ses-1
+    No POSITION channels found for subject sub-S0001111189359_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001111189359_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001111189359_ses-1
+    No EMG_LEG channels found for subject sub-S0001117494823_ses-1
+    No POSITION channels found for subject sub-S0001117494823_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001117494823_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001117494823_ses-1
+    No EMG_LEG channels found for subject sub-S0001116283767_ses-1
+    No POSITION channels found for subject sub-S0001116283767_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001116283767_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001116283767_ses-1
+    No EMG_LEG channels found for subject sub-S0001116283767_ses-2
+    No POSITION channels found for subject sub-S0001116283767_ses-2
+    No HR_DERIVATED channels found for subject sub-S0001116283767_ses-2
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001116283767_ses-2
+Chin and REF
+Chin and REF
+Chin and REF
+    No EMG_LEG channels found for subject sub-S0001116639282_ses-1
+    No SP02 channels found for subject sub-S0001116639282_ses-1
+    No POSITION channels found for subject sub-S0001116639282_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001116639282_ses-1
+    No HR channels found for subject sub-S0001116639282_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001116639282_ses-1
+    No EMG_LEG channels found for subject sub-S0001117882511_ses-3
+    No POSITION channels found for subject sub-S0001117882511_ses-3
+    No HR_DERIVATED channels found for subject sub-S0001117882511_ses-3
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001117882511_ses-3
+    No ECG channels found for subject sub-S0001121582430_ses-3
+    No EMG_LEG channels found for subject sub-S0001121582430_ses-3
+    No POSITION channels found for subject sub-S0001121582430_ses-3
+    No HR_DERIVATED channels found for subject sub-S0001121582430_ses-3
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001121582430_ses-3
+    No EMG_LEG channels found for subject sub-S0001121557120_ses-1
+    No POSITION channels found for subject sub-S0001121557120_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001121557120_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001121557120_ses-1
+    No EMG_LEG channels found for subject sub-S0001121555968_ses-1
+    No POSITION channels found for subject sub-S0001121555968_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001121555968_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001121555968_ses-1
+    No EMG_LEG channels found for subject sub-S0001121557972_ses-1
+    No POSITION channels found for subject sub-S0001121557972_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001121557972_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001121557972_ses-1
+    No EMG_LEG channels found for subject sub-S0001121556135_ses-1
+    No POSITION channels found for subject sub-S0001121556135_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001121556135_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001121556135_ses-1
+    No ECG channels found for subject sub-S0001121903400_ses-1
+    No EMG_LEG channels found for subject sub-S0001121903400_ses-1
+    No POSITION channels found for subject sub-S0001121903400_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001121903400_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001121903400_ses-1
+    No EMG_LEG channels found for subject sub-S0001121558575_ses-1
+    No POSITION channels found for subject sub-S0001121558575_ses-1
+    No HR_DERIVATED channels found for subject sub-S0001121558575_ses-1
+[SUCCESS] EDF to H5 conversion completed for subject sub-S0001121558575_ses-1
+[INFO] All subjects converted successfully.

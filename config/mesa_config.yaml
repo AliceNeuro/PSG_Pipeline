@@ -1,0 +1,46 @@
+dataset:
+  name: mesa
+  session: null # visit number
+  
+paths:
+  input: /wynton/group/andrews/data/mesa/nsrr/polysomnography/
+  # /Users/alicealbrecht/wynton_data/mesa/polysomnography/
+  # /wynton/group/andrews/data/mesa/polysomnography/
+  output: /wynton/group/andrews/data/PSG_Pipeline_Outputs/ 
+  # /Users/alicealbrecht/Desktop/PSG_Pipeline_Outputs/ 
+  # /wynton/group/andrews/data/PSG_Pipeline_Outputs/        
+
+output:
+  overwrite_mastersheet : false
+  overwrite_h5: false
+  overwrite_events: true
+  overwrite_old_features: true # overwrite existing extracted features
+
+features:
+  extract_all: false 
+  selected: # not looked if extract_all = true
+    - hrv
+    - cpc
+    - hrnadir
+
+analysis:
+  # process_signals
+  rpeaks_detection_method: nk # "Farhad_Kenn" or "nk" (by default)
+  ecg_contamination_removal_method: yes
+  # selecting_windows
+  window_size_min: 5 # 5 min per window (300sec = 10 epochs)
+  window_step_sec: 30 # move from one epoch eahc time (30s = 1 epoch)
+  clean_rpeaks_ratio_threshold: 1 # percentage of clena r_peaks in the window
+  stage_types: ['WN', 'REM', 'N2N3'] # start with WN like ['WN', 'REM', 'N2N3']
+  stage_purity: 1 # 0.9 means 1 epoch uncorrect (out of 10 for a 5min window)
+  allowed_overlap_sec: 0 # 0 for full independence (min autocorrelation)
+  # adjust rpeaks
+  min_rri_sec: 0.3 # remove rr intervals shorter than 0.3 seconds (>200 bpm)
+  max_rri_sec: 2.0 # remove rr intervals longer than 3 seconds (<20 bpm)
+  removal_warning_threshold: 0.01 # Proportion of total values removed 
+
+run:
+  verbose: false
+  parallel: true
+  num_workers: 8
+  logging_level: info  # debug / info / warning / error

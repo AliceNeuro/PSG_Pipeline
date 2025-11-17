@@ -1,0 +1,54 @@
+# Byte-compiled / optimized / DLL files
+*.csv
+*.h5
+*.npy
+
+
+# Virtual environments
+.venv/
+*.env
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Python egg files
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment & IDE
+.vscode/
+.idea/
+*.swp
+
+# Input and Output shoudl not be in code 
+datasets/
+extracted_features/
+tmp/
+
+# MATLAB
+UCSF_HRV_Tool_Matlab_GUI_Kenn_Farhad/
+*.mex*
+*.mat
+*.fig
+
+# Compiled C code
+edr
+*.so
+*.o
+*.out
+*.exe
+*.dll
