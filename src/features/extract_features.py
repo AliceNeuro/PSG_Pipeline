@@ -3,6 +3,7 @@ import inspect
 from features.hrv_features import extract_hrv
 from features.cpc_features import extract_cpc
 from features.hrnadir_features import extract_hrnadir
+from features.hypoxic_burden_features import extract_hb
 
 def extract_features(config, row, tmp_dir_sub, sleep_stages, sleep_onset_time, processed_signals, df_events, windows_dict):
     FEATURE_REGISTRY = {
@@ -17,6 +18,10 @@ def extract_features(config, row, tmp_dir_sub, sleep_stages, sleep_onset_time, p
         "hrnadir": {
             "func": extract_hrnadir,
             "args": ["config", "sub_id", "ecg_data", "sleep_stages"],
+        },
+        "hb": {
+            "func": extract_hb,
+            "args": ["row", "spo2_data", "df_events", "full_sleep_stages"],
         },
         # Add more features as needed
     }
@@ -49,7 +54,7 @@ def extract_features(config, row, tmp_dir_sub, sleep_stages, sleep_onset_time, p
                             else:
                                 windows_dict_ecg = None
                             break  # stop at the first available ECG
-
+                        
                 all_data = {
                     "config": config,
                     "row": row,
@@ -59,9 +64,11 @@ def extract_features(config, row, tmp_dir_sub, sleep_stages, sleep_onset_time, p
                     "ecg_data": ecg_data,
                     "eeg_data": processed_signals.get("EEG", {}),
                     "resp_data": processed_signals.get("RESP", {}),
+                    "spo2_data": processed_signals.get("SPO2", {}),
                     "df_events": df_events,
                     "windows_dict_ecg": windows_dict_ecg
                 }
+
 
                 kwargs = {k: all_data[k] for k in func_args if k in all_data}
                 result = func(**kwargs)

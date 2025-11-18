@@ -66,9 +66,8 @@ def main():
     #             selected_subjects_sessions.append((sub_id, int(session)))
     
     selected_subjects = [
-        ("pi4519", 1),
-        ("po6919", 1),
-        ("sd8616", 1),
+        ("S0001113071260", 1),
+        ("S0001112956909", 1),
         ]
     mastersheet = mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in selected_subjects, axis=1)]
     print(len(selected_subjects), "selected subjects/sessions:", mastersheet[["sub_id", "session"]].values.tolist())
@@ -99,7 +98,6 @@ def main():
     # mastersheet = mastersheet[~mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in no_ECG, axis=1)]
     # print(len(mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in too_early_start, axis=1)])," PSG with sleep stages starting too_early.")
     # mastersheet = mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in too_late_start, axis=1)]
-    # mastersheet = mastersheet[:1]
     rows = mastersheet.to_dict(orient="records")
 
     # --- Step 3: Convert EDF to H5 file --- 

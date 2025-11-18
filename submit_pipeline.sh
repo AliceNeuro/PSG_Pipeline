@@ -8,11 +8,10 @@
 #$ -pe smp 8
 #$ -l mem_free=2G 
 
-# Load environment
-module load CBI
-unset CONDA_EXE
-module load miniforge3/24.11.0-0
-module load matlab
+# Activate environment
+# module load CBI
+# module load miniforge3/24.11.0-0
+# module load matlab
 conda activate env_sleep_py310
 
 # Run your pipeline

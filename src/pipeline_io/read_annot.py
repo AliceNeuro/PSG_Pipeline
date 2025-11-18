@@ -373,10 +373,17 @@ def read_annot_MGB(row):
          
             # Shift event file if not matching recording time
             edf_start_sec = datetime_to_sec(row["start_time"]) 
+            if "Recording Resumed" in df_events['event_type'].values:
+                # Cut the table so this row is the first
+                resumed_row = df_events[df_events['event_type'] == "Recording Resumed"].iloc[0]
+                df_events = df_events.loc[resumed_row.name:].reset_index(drop=True)
+                # Update edf_start_sec to the clock_time of this row
+                edf_start_sec = datetime_to_sec(resumed_row['clock_time'])
+
             df_events['clock_time'] = df_events['clock_time'].apply(datetime_to_sec)
 
             # --- START: ENSURING TIME CONTINUITY - MIDNIGHT - LIGHT ---      
-            # Find rows with "LIGHT" in 'event_type' (case-insensitive)
+            # Find rows with "LIGHT" in 'event_type' 
             mask_light = df_events['event_type'].str.contains("LIGHT", case=True, na=False)
             light_rows = df_events[mask_light].copy()  # store for later
             df_events = df_events[~mask_light].reset_index(drop=True)  # remove from df_events
