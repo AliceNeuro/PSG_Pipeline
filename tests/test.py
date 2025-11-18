@@ -24,7 +24,6 @@ edf_duration = 28110  # seconds, as per your previous calculation
 diff = annot_duration - edf_duration 
 print("Annotation vs EDF duration difference (s):", diff)
 
-# Wirdly obtained just test
 paused_time = start_time + timedelta(seconds=diff)
 print("Paused at:", paused_time)
 
