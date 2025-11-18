@@ -21,9 +21,10 @@ start_time = df_annot.iloc[0]['time_dt']
 end_time = df_sleep.iloc[-1]['time_dt'] + timedelta(seconds=30)
 annot_duration = (end_time - start_time).total_seconds()
 edf_duration = 28110  # seconds, as per your previous calculation
-diff = annot_duration - edf_duration
+diff = annot_duration - edf_duration 
 print("Annotation vs EDF duration difference (s):", diff)
 
+# Wirdly obtained just test
 paused_time = start_time + timedelta(seconds=diff)
 print("Paused at:", paused_time)
 
