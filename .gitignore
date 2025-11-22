@@ -24,6 +24,9 @@ build/
 
 # Logs
 log/
+log/*
+plots/
+plots/*
 
 # OS files
 .DS_Store
