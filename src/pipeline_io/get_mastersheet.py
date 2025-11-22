@@ -27,8 +27,9 @@ def get_mastersheet(config):
         else config.dataset.name.lower()
     )
     mastersheet_paths = [
-        #mastersheet_folder / f"{dataset_key}_mastersheet_post_summary.csv",
-        mastersheet_folder / f"{dataset_key}_mastersheet_diagnostic.csv"
+        mastersheet_folder / f"{dataset_key}_mastersheet_post_summary.csv",
+        mastersheet_folder / f"{dataset_key}_mastersheet_diagnostic.csv",
+        mastersheet_folder / f"{dataset_key}_mastersheet.csv"
     ]
 
     # Load the first existing mastersheet if overwrite is False

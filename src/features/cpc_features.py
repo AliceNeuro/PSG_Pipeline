@@ -140,9 +140,9 @@ def get_edr_from_ecg(ecg_signal, rpeaks, sfreq_ecg, tmp_dir_sub):
 
     # --- Fix: set LD_LIBRARY_PATH for subprocess ---
     env = os.environ.copy()
-    # wfdb_lib_dir = str(project_src_root / "external_tools/wfdb/lib")
-    wfdb_lib_dir = "/wynton/home/leng/alice-albrecht/projects/wfdb/lib"
-    env["LD_LIBRARY_PATH"] = env.get("LD_LIBRARY_PATH", "") + f":{wfdb_lib_dir}"
+    wfdb_lib_dir = "/wynton/home/leng/alice-albrecht/lib/wfdb/lib"
+    if not env.get("LD_LIBRARY_PATH"):
+        env["LD_LIBRARY_PATH"] = wfdb_lib_dir
 
     # Run external EDR binary
     with open(edr_file, "w") as f:

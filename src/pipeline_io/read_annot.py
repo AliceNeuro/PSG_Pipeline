@@ -356,7 +356,7 @@ def read_annot_MGB(row):
     # -------- EVENT ---------
     # ------------------------
     if pd.isna(annot_path): # Creating empty df_events
-        print(f"[WARNING] {psg_id}: No Annot Stage Path found.") # 1 time
+        print(f"[WARNING] {psg_id}: No annot path found.") # 1 time
         df_events = pd.DataFrame(columns=["onset", "duration", "event_type"])
     else: # Read the slepe stage from the specific file 
         df_annot = pd.read_csv(annot_path)
@@ -373,12 +373,13 @@ def read_annot_MGB(row):
          
             # Shift event file if not matching recording time
             edf_start_sec = datetime_to_sec(row["start_time"]) 
-            if "Recording Resumed" in df_events['event_type'].values:
-                # Cut the table so this row is the first
-                resumed_row = df_events[df_events['event_type'] == "Recording Resumed"].iloc[0]
-                df_events = df_events.loc[resumed_row.name:].reset_index(drop=True)
-                # Update edf_start_sec to the clock_time of this row
-                edf_start_sec = datetime_to_sec(resumed_row['clock_time'])
+            # Nope in the end it's not impacting normally 
+            # if "Recording Resumed" in df_events['event_type'].values:
+            #     # Cut the table so this row is the first
+            #     resumed_row = df_events[df_events['event_type'] == "Recording Resumed"].iloc[0]
+            #     df_events = df_events.loc[resumed_row.name:].reset_index(drop=True)
+            #     # Update edf_start_sec to the clock_time of this row
+            #     edf_start_sec = datetime_to_sec(resumed_row['clock_time'])
 
             df_events['clock_time'] = df_events['clock_time'].apply(datetime_to_sec)
 
@@ -448,13 +449,14 @@ def read_annot_MGB(row):
                 offset_sec = annot_start_sec - edf_start_sec 
                 if abs(offset_sec) <= 1:
                     if offset_sec != 0:
-                        print(f"[INFO] {psg_id}: Shift of {offset_sec} s")
+                        print(f"[INFO] {psg_id}: Based on first event - shift of {offset_sec} s")
                     df_events["onset"] = df_events["clock_time"].astype(float) - (edf_start_sec + offset_sec)
                 elif offset_sec < -1:
+                    # Check first sleep stage if event start before recording
                     new_offset_sec = sleep_start_sec - edf_start_sec
                     if abs(new_offset_sec) <= 1:
                         if new_offset_sec != 0:
-                            print(f"[INFO] {psg_id}: Shift of {new_offset_sec} s")
+                            print(f"[INFO] {psg_id}: Based on first stage - shift of {new_offset_sec} s")
                         df_events["onset"] = df_events["clock_time"].astype(float) - (edf_start_sec + new_offset_sec)
                     elif new_offset_sec < -1:
                         print(f"[WARNING] {psg_id}: Events ({offset_sec:.3f}s) and Sleep Stages ({new_offset_sec:.3f}s) start before recording.")
@@ -585,6 +587,7 @@ def read_annot_MGB(row):
                     full_sleep_stages[start_idx:end_idx] = row['sleep_stage']
                 
                 if overflow_values and any(not (np.isnan(x) or x == 0) for x in overflow_values):
+                    overflow_values = [int(x) if not (isinstance(x, float) and math.isnan(x)) else np.nan for x in overflow_values]
                     print(f"[WARNING] {psg_id}: Trimming extra sleep_stages: {overflow_values}")
 
             # -------- CONCAT SLEEP EVENTS ----------

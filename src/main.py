@@ -24,6 +24,9 @@ from analysis.selecting_windows import selecting_windows
 from features.extract_features import extract_features
 from pipeline_io.save_features import save_features, save_features_wide
 
+# tests
+from utils.yasa_compare import yasa_compare
+
 def main():
     # --- Step 1: Read Config and Save a copy in the output ---
     config, config_path = read_config()
@@ -64,13 +67,12 @@ def main():
     #             sub_id = psg_id.split('_')[0]
     #             session = psg_id.split('ses-')[-1]
     #             selected_subjects_sessions.append((sub_id, int(session)))
-    
-    selected_subjects = [
-        ("S0001113071260", 1),
-        ("S0001112956909", 1),
-        ]
-    mastersheet = mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in selected_subjects, axis=1)]
-    print(len(selected_subjects), "selected subjects/sessions:", mastersheet[["sub_id", "session"]].values.tolist())
+    # selected_subjects = [
+    #     ("S0001111197789", 1),
+    #     ("S0001111245075", 1),
+    # ]
+    # mastersheet = mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in selected_subjects, axis=1)]
+    # print(len(selected_subjects), "selected subjects/sessions:", mastersheet[["sub_id", "session"]].values.tolist())
     ### End additional code to run only selected subs ### 
 
     # mastersheet = mastersheet[ ~(mastersheet['annot_path'].isna() & mastersheet['sleep_stage_path'].isna())] # remove the PSG that have any event or sleep annotations
@@ -98,6 +100,7 @@ def main():
     # mastersheet = mastersheet[~mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in no_ECG, axis=1)]
     # print(len(mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in too_early_start, axis=1)])," PSG with sleep stages starting too_early.")
     # mastersheet = mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in too_late_start, axis=1)]
+    # mastersheet = add_metatdata(mastersheet) 
     rows = mastersheet.to_dict(orient="records")
 
     # --- Step 3: Convert EDF to H5 file --- 
@@ -159,6 +162,7 @@ def _process_subject_safe(config, row):
     psg_id = f"sub-{sub_id}_ses-{session}" 
     try:
         extracted_features = process_subject(config, row)
+        # extracted_features = check_sleep_stages(config, row)
         if extracted_features is None:
             print(f"[WARNING] No features extracted for subject {psg_id}", flush=True)
             return None
@@ -238,6 +242,58 @@ def process_subject(config, row):
         shutil.rmtree(tmp_dir_sub) 
 
     return extracted_features
+
+
+# --- OPTIONAL TEST !! Compare sleep stages ---
+def check_sleep_stages(config, row):
+    sub_id = row["sub_id"]
+    session = row["session"]
+    psg_id = f"sub-{sub_id}_ses-{session}" 
+
+    # --- Step 4a: Define subject specific data ---
+    if config.run.verbose:
+        print(f"\nProcessing subject {row['sub_id']} session {row['session']}")
+
+    # --- Step 4b: Read annotation XML file ---
+    full_sleep_stages, df_events = read_annot(
+        row,
+        dataset_name=config.dataset.name)
+    
+    # Check if full_sleep_stages does NOT contain any 1, 2, 3, or 4
+    if not any(s in [1, 2, 3, 4] for s in full_sleep_stages if not math.isnan(s)):
+        print(f"[ERROR] {psg_id }: full_sleep_stages contains no valid stages!", flush=True)
+        return None
+    
+    composite_score = yasa_compare(row, full_sleep_stages, psg_id)
+
+    return composite_score
+
+
+def add_metatdata(mastersheet):
+    metadata = pd.read_csv("/wynton/group/andrews/data/HSP/PSG/psg-metadata/MGB_S0001_psg_metadata_2025-07-09.csv")
+    metadata['sub_id'] = (
+        metadata['SiteID'].astype(str) +
+        metadata['BDSPPatientID'].astype(str)
+    )
+    metadata = metadata.rename(columns={
+        "SessionID": "session",
+        "AgeAtVisit": "age",
+        "SexDSC": "gender",
+    })
+    mastersheet = mastersheet.merge(
+        metadata[['sub_id', 'session', 'age', 'gender']],
+        on=['sub_id', 'session'],
+        how='left'
+    )
+    # To have 0:female and 1:male
+    mastersheet['gender'] = (
+        mastersheet['gender']
+        .str.upper()
+        .map({"FEMALE": 0, "MALE": 1})
+        .astype('Int64')
+    )
+
+    return mastersheet
 
 if __name__ == "__main__":
     main()

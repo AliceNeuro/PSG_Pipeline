@@ -23,7 +23,7 @@ dist/
 build/
 
 # Logs
-*.log
+log/
 
 # OS files
 .DS_Store
@@ -48,7 +48,7 @@ UCSF_HRV_Tool_Matlab_GUI_Kenn_Farhad/
 # Compiled C code
 edr
 *.so
-*.o
+*.o?
 *.out
 *.exe
 *.dll
