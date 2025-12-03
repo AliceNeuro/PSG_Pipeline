@@ -3,8 +3,8 @@ import pandas as pd
 import math
 
 # === CONFIG ===
-dataset_name = "hsp_bidmc" 
-run_date = "20251114"
+dataset_name = "hsp_mgb" 
+run_date = "20251121"
 results_path = f"/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/{dataset_name}/run_{run_date}/"
 print(results_path)
 # results_path = "/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/shhs_ses-1/run_20251013"

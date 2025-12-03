@@ -21,4 +21,4 @@ def process_sleep_stages(full_sleep_stages, sfreq_global, start_time, verbose):
         print("Sleep Onset seconds:", sleep_onset_offset_sec)
         print("Sleep Onset time:", sleep_onset_time)
 
-    return sleep_stages, sleep_onset_time
+    return sleep_stages, sleep_onset_offset_sec, sleep_onset_time

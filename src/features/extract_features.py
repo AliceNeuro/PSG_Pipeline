@@ -4,8 +4,10 @@ from features.hrv_features import extract_hrv
 from features.cpc_features import extract_cpc
 from features.hrnadir_features import extract_hrnadir
 from features.hypoxic_burden_features import extract_hb
+from features.arousal_burden_features import extract_ab
+from features.ventilatory_burden_features import extract_vb
 
-def extract_features(config, row, tmp_dir_sub, sleep_stages, sleep_onset_time, processed_signals, df_events, windows_dict):
+def extract_features(config, row, tmp_dir_sub, full_sleep_stages, sleep_stages, sleep_onset_offset_sec, sleep_onset_time, processed_signals, df_events, windows_dict):
     FEATURE_REGISTRY = {
         "hrv": {
             "func": extract_hrv,
@@ -21,8 +23,17 @@ def extract_features(config, row, tmp_dir_sub, sleep_stages, sleep_onset_time, p
         },
         "hb": {
             "func": extract_hb,
-            "args": ["row", "spo2_data", "df_events", "full_sleep_stages"],
+            "args": ["row", "spo2_data", "df_events", "full_sleep_stages", "verbose"],
         },
+        "ab": {
+            "func": extract_ab,
+            "args": ["row", "df_events", "sleep_stages", "sleep_onset_offset_sec"],
+        },
+        "vb": {
+            "func": extract_vb,
+            "args": ["row", "tmp_dir_sub", "resp_data", "sleep_stages", "verbose"],
+        },
+
         # Add more features as needed
     }
 
@@ -43,30 +54,42 @@ def extract_features(config, row, tmp_dir_sub, sleep_stages, sleep_onset_time, p
                 # --- ECG data selection ---
                 ecg_data = None
                 windows_dict_ecg = None
-                ecg_order = ["ECG", "ECG_L", "ECG_R"]
-
-                for key in ecg_order:
-                    if key in processed_signals and processed_signals[key] is not None:
-                        if processed_signals[key].get("clean_rpeaks") is not None:
-                            ecg_data = processed_signals[key]
-                            if windows_dict is not None:
-                                windows_dict_ecg = windows_dict.get(key, None)
-                            else:
-                                windows_dict_ecg = None
-                            break  # stop at the first available ECG
-                        
+                if feature_name in ["hrv", "cpc", "hrnadir"]:
+                    ecg_order = ["ECG", "ECG_L", "ECG_R"]
+                    for key in ecg_order:
+                        if key in processed_signals and processed_signals[key] is not None:
+                            if processed_signals[key].get("clean_rpeaks") is not None:
+                                ecg_data = processed_signals[key]
+                                if windows_dict is not None:
+                                    windows_dict_ecg = windows_dict.get(key, None)
+                                else:
+                                    windows_dict_ecg = None
+                                break  # stop at the first available ECG
+                    
+                # --- RESP data selection ---
+                resp_data = None
+                if feature_name == "vb":
+                    if "NASAL_PRESSURE" in processed_signals:
+                        resp_data = processed_signals["NASAL_PRESSURE"]
+                    elif "THERM" in processed_signals:
+                        resp_data = processed_signals["THERM"]
+                    
+                # --- Attribute All Data ---     
                 all_data = {
                     "config": config,
                     "row": row,
                     "sub_id" : row["sub_id"],
                     "tmp_dir_sub": tmp_dir_sub,
-                    "sleep_stages": sleep_stages,                    "sleep_onset_time": sleep_onset_time,
+                    "full_sleep_stages": full_sleep_stages,
+                    "sleep_stages": sleep_stages,
+                    "sleep_onset_offset_sec": sleep_onset_offset_sec,
+                    "sleep_onset_time": sleep_onset_time,
                     "ecg_data": ecg_data,
-                    "eeg_data": processed_signals.get("EEG", {}),
-                    "resp_data": processed_signals.get("RESP", {}),
+                    "resp_data": resp_data,
                     "spo2_data": processed_signals.get("SPO2", {}),
                     "df_events": df_events,
-                    "windows_dict_ecg": windows_dict_ecg
+                    "windows_dict_ecg": windows_dict_ecg,
+                    "verbose":config.run.verbose,
                 }
 
 
@@ -82,7 +105,7 @@ def extract_features(config, row, tmp_dir_sub, sleep_stages, sleep_onset_time, p
                     else:
                         extracted_features.update(result)
                 else: 
-                    print(f"[WARNING] Sub {row['sub_id']}: Feature '{feature_name}' was not computed: no valid R-peaks or clean windows found.")
+                    print(f"[WARNING] Sub {row['sub_id']}: Feature '{feature_name}' was not computed (potentially no valid R-peaks or clean windows found).")
 
             except Exception as e:
                 print(f"[ERROR] Sub {row['sub_id']}: Failed to extract '{feature_name}': {e}")

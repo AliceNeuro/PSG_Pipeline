@@ -1,7 +1,7 @@
 function get_Farhad_Kenn_rpeaks(ecg_file)
     % Add the path to the R-peak detection code
 
-    addpath("/wynton/home/leng/alice-albrecht/matlab_tools/UCSF_HRV_Tool_Matlab_GUI_Kenn_Farhad");
+    addpath(genpath("/wynton/home/leng/alice-albrecht/matlab_tools/UCSF_HRV_Tool_Matlab_GUI_Kenn_Farhad"));
 
     % Load the subject-specific ECG file (must contain ecg, fs)
     load(ecg_file);

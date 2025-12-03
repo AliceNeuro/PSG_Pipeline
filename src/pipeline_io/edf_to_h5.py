@@ -31,9 +31,9 @@ def edf_to_h5(config, rows):
     else:
         print(f"[INFO] Converting {len(rows)} EDF files (not in parallel).")
         for row in rows:
-            sub_id, success = _edf_to_h5_one_subject_safe(config, row)
+            psg_id, success = _edf_to_h5_one_subject_safe(config, row)
             if not success:
-                failed_subs.append(sub_id)
+                failed_subs.append(psg_id)
 
     if failed_subs:
         print(f"[ERROR] The following subjects failed EDF->H5 conversion: {failed_subs}")
@@ -50,11 +50,11 @@ def _edf_to_h5_one_subject_safe(config, row):
     try:
         edf_to_h5_one_subject(config, row)
         print(f"[SUCCESS] EDF to H5 conversion completed for subject {psg_id}", flush=True)
-        return sub_id, True
+        return psg_id, True
     except Exception as e:
         print(f"[ERROR] Failed conversion for {psg_id}: {e}", flush=True)
         traceback.print_exc(file=sys.stdout)
-        return sub_id, False
+        return psg_id, False
     
     
 
@@ -76,7 +76,7 @@ def edf_to_h5_one_subject(config, row):
             warnings.simplefilter("ignore", category=RuntimeWarning)
             raw = mne.io.read_raw_edf(edf_path, preload=False, verbose=False)
     else:
-        print(f"    [ERROR] EDF file not found for subject {sub_id}: {edf_path}", flush=True)
+        print(f"    [ERROR] EDF file not found for subject {psg_id}: {edf_path}", flush=True)
         return 
 
     # --- Step 3c: Get and save metadata ---
@@ -106,15 +106,17 @@ def edf_to_h5_one_subject(config, row):
         "EMG_CHIN": ["CHIN", "EMG"],
         "EMG_LEG": ["LEG"],
         "EMG_ARM": ["ARM", "LAT", "RAT"],
-        "RESP_AIRFLOW": ["AIRFLOW", "FLOW"] if config.dataset.name.lower() != "hsp_mgb" else ["AIRFLOW"],
+        "RESP_THERM": ["AIRFLOW", "THERM", "NEW AIR", "NEWAIR"],
+        "RESP_NASAL_PRESSURE": ["FLOW", "CANNULA", "PTAF", "NPT"],
         "RESP_ABDOMINAL": ["ABD", "ABDO", "ABDOMINAL"],
         "RESP_THORACIC": ["CHEST", "THORAX", "THORACIC", "THOR"],
-        "SP02": ["SAO2", "SPO2"],
+        "SPO2": ["SAO2", "SPO2"],
         "POSITION": ["POS", "POSITION"],
         "HR_DERIVATED": ["DHR"],
         "HR": ["HR"],
-        "EOG": ["EOG","E1", "E2","ROC","LOC"] # at the end on purpose
+        "EOG": ["EOG","E1", "E2","ROC","LOC"],
         }
+
     extract_and_save_channels(psg_id, raw, sfreq_per_channel, SIGNAL_TARGETS, eeg_founded,h5_path, config.run.verbose)
 
 
@@ -127,12 +129,15 @@ def get_metadata(raw):
     sfreq_global = raw.info['sfreq']
     duration_samples = raw.n_times
     duration_sec = duration_samples / sfreq_global
-    metadata = {"start_time": np.string_(start_time.isoformat()),
+    record_length = float(np.mean(raw._raw_extras[0]['record_length']))
+    if record_length != 1.0:
+        print(f"[WARNING] Record length is not 1s: {record_length}")
+    metadata = {"start_time": np.bytes_(start_time.isoformat()),
                 "sfreq_global": sfreq_global,
                 "duration_samples": duration_samples,
                 "duration_sec": duration_sec,
                 "channel_names": raw.info['ch_names'],
-                "sfreq_per_channel": raw._raw_extras[0]['n_samps']
+                "sfreq_per_channel": raw._raw_extras[0]['n_samps'] / record_length
                 }
     return metadata
 
@@ -143,22 +148,19 @@ def save_metadata_to_h5(metadata, h5_path):
         for key, value in metadata.items():
             metadata_grp.attrs[key] = value
 
-def get_channel_sampling_freqs(metadata):
-    """
-    Return {channel_name: sampling_frequency} using MNE's public API.
-    """
+def get_channel_sampling_freqs(metadata):  
     return {
         ch : fs 
         for ch, fs in zip(metadata["channel_names"],metadata["sfreq_per_channel"])
     }
 
 # --- Step 3d: Get and save the EEG signals and their attributes ---
-def extract_eeg_channel(raw, sfreq_per_channel, target, refs, sub_id):
+def extract_eeg_channel(raw, sfreq_per_channel, target, refs, psg_id):
     channel_names = raw.ch_names.copy() 
     harmon_to_raw = {ch: ch for ch in channel_names} 
 
     # Adjust for SHHS
-    if "shhs" in sub_id.lower():
+    if "shhs" in psg_id.lower():
         eeg_channels = [ch for ch in channel_names if "EEG" in ch.upper()]
         if eeg_channels:
             ch_with_more = max(eeg_channels, key=len)
@@ -169,11 +171,11 @@ def extract_eeg_channel(raw, sfreq_per_channel, target, refs, sub_id):
                     harmon_to_raw[harmon] = orig
 
     # Adjust for MESA
-    if "mesa" in sub_id.lower():
+    if "mesa" in psg_id.lower():
         required_channels = ["EEG1", "EEG2", "EEG3"]
         missing = [ch for ch in required_channels if ch not in channel_names]
         if missing:
-            print(f"    [ERROR] Sub {sub_id} has EEG issues: {channel_names}", flush=True)
+            print(f"    [ERROR] Sub {psg_id} has EEG issues: {channel_names}", flush=True)
         else:
             rename_map = {"EEG1": "Fz-Cz", "EEG2": "Cz-Oz", "EEG3": "C4-M1"}
             for orig, harmon in rename_map.items():
@@ -189,7 +191,7 @@ def extract_eeg_channel(raw, sfreq_per_channel, target, refs, sub_id):
             signal = raw.get_data(picks=raw_name)[0]
             fs = sfreq_per_channel.get(raw_name)
             if fs is None:
-                print(f"[WARNING] No sampling rate found for channel '{raw_name}' for subject {sub_id}", flush=True)
+                print(f"[WARNING] No sampling rate found for channel '{raw_name}' for subject {psg_id}", flush=True)
                 return None, {
                     'harmonized_name': harmonized_name,
                     'raw_names': [raw_name],
@@ -212,7 +214,7 @@ def extract_eeg_channel(raw, sfreq_per_channel, target, refs, sub_id):
             signal = sig1[:min_len] - sig2[:min_len]
             fs = sfreq_per_channel.get(target)
             if fs is None:
-                print(f"[WARNING] No sampling rate found for channel '{target}' for subject {sub_id}", flush=True)
+                print(f"[WARNING] No sampling rate found for channel '{target}' for subject {psg_id}", flush=True)
                 return None, {
                     'harmonized_name': harmonized_name,
                     'raw_names': [target, ref],
@@ -234,13 +236,13 @@ def extract_eeg_channel(raw, sfreq_per_channel, target, refs, sub_id):
         'type': 'EEG',
     }
 
-def save_eeg_signals_to_h5(sub_id, raw, sfreq_per_channel, targets, h5_path, verbose):
+def save_eeg_signals_to_h5(psg_id, raw, sfreq_per_channel, targets, h5_path, verbose):
     extracted_eeg_count = 0
     eeg_founded = []
 
     with h5py.File(h5_path, "a") as f:
         for target, refs in targets.items():
-            signal, attrs = extract_eeg_channel(raw, sfreq_per_channel, target, refs, sub_id)
+            signal, attrs = extract_eeg_channel(raw, sfreq_per_channel, target, refs, psg_id)
 
             if signal is not None:
                 eeg_founded.append(attrs['raw_names'])
@@ -248,7 +250,7 @@ def save_eeg_signals_to_h5(sub_id, raw, sfreq_per_channel, targets, h5_path, ver
                 path = f"signals/EEG/{attrs['harmonized_name']}"
                 dset = save_signal_to_h5(f, path, signal, attrs)
                 if dset is not None and verbose:
-                    print(f"[OK] {sub_id} {path} : {attrs['raw_names']}")
+                    print(f"[OK] {psg_id} {path} : {attrs['raw_names']}")
     
     # Flatten list of lists and remove duplicates
     eeg_founded = [ch for sublist in eeg_founded for ch in sublist]
@@ -257,7 +259,7 @@ def save_eeg_signals_to_h5(sub_id, raw, sfreq_per_channel, targets, h5_path, ver
     return eeg_founded
                 
 # --- Step 3e: Get and save the other signals and their attributes ---
-def find_channels(channel_names, signal_name, keywords, sub_id):
+def find_channels(channel_names, signal_name, keywords, psg_id):
 
     # Find channels matching any keyword (case-insensitive) 
     matches = [
@@ -307,13 +309,10 @@ def find_channels(channel_names, signal_name, keywords, sub_id):
                 left, right = ch.split("-", 1)
                 prefix_left = ''.join([c for c in left if c.isalpha()])
                 prefix_right = ''.join([c for c in right if c.isalpha()])
-                print(prefix_left, "and", prefix_right)
                 if prefix_left == prefix_right:
-                    print(prefix_left, "==", prefix_right)
                     matches = [ch]
                 elif prefix_right == "REF":
                     matches = matches[:2]
-                    
 
     # If both EMG and CHIN remove EMG form matches
     if any("EMG" in ch.upper() for ch in matches) and any("CHIN" in ch.upper() for ch in matches):
@@ -322,9 +321,22 @@ def find_channels(channel_names, signal_name, keywords, sub_id):
     # Extremly specific -> decide to keep Arm1 and Arm2
     if len(matches) > 2 and any("ARM1" in m.upper() for m in matches) and any("ARM2" in m.upper() for m in matches):
         matches = [m for m in matches if "ARM1" in m.upper() or "ARM2" in m.upper()]
+    
+    # Adjust Therm - Airflow selection 
+    if any("AIRFLOW" in ch.upper() for ch in matches) and len(matches) > 1:
+        matches = [m for m in matches if "NEW" in m.upper()]
+        if len(matches) != 1:
+            matches = [m for m in matches if m.upper() == "AIRFLOW"]
+    
+    if any("CFLOW" in ch.replace("-", "").upper() for ch in matches) and len(matches) > 1:
+        matches = [m for m in matches if "CFLOW" not in m.replace("-", "").upper()]
 
+    if any("XFLOW" in ch.replace("-", "").upper() for ch in matches) and len(matches) > 1:
+        matches = [m for m in matches if "XFLOW" not in m.replace("-", "").upper()]
+
+    # Now Final 3 cases 0, 1, >= 2
     if len(matches) == 0:   
-        print(f"    No {signal_name} channels found for subject {sub_id}")
+        print(f"    No {signal_name} channels found for subject {psg_id}")
         return []
     elif len(matches) == 1:
         return matches  # single channel list
@@ -343,7 +355,7 @@ def find_channels(channel_names, signal_name, keywords, sub_id):
         cleaned_matches = [ch.replace(common_string, '') for ch in matches]
 
     # Overwrite clean match to adjust cases like [CHIN, CHIN3]
-    if ('' in cleaned_matches) and any(ch in {'3', '.'} for ch in cleaned_matches):
+    if ('' in cleaned_matches) and any(ch in {'3', '.'} for ch in cleaned_matches): 
         print("Dot OR 3 before:", cleaned_matches)
         cleaned_matches = ['2' if ch in {'3', '.'} else ch for ch in cleaned_matches]
         print("Dot OR 3 after :", cleaned_matches)
@@ -356,6 +368,9 @@ def find_channels(channel_names, signal_name, keywords, sub_id):
                 m[:-len(suffix)] if m.upper().endswith(suffix) else m
                 for m in matches
             ]
+            if len(cleaned_matches) > 2:
+                cleaned_matches = [
+                    m.split('-')[0] for m in cleaned_matches if '-' in m]
 
     # Identify left/right using cleaned channel names
     left_candidates = [matches[i] for i, ch in enumerate(cleaned_matches) if "L" in ch or "1" in ch or "OLD" in ch or "UP" in ch]
@@ -373,23 +388,27 @@ def find_channels(channel_names, signal_name, keywords, sub_id):
     if len(left_candidates) == 1 and len(right_candidates) == 1:
         return [left_candidates[0], right_candidates[0]]
     else:
-        print(f"    [ERROR] Cannot uniquely identify left/right in {signal_name} channels {matches} for subject {sub_id}")
+        print(f"    [ERROR] Cannot uniquely identify left/right in {signal_name} channels {matches} for subject {psg_id}")
         return []
     
 
-def extract_and_save_channels(sub_id, raw, sfreq_per_channel, SIGNAL_TARGETS, eeg_founded, h5_path, verbose):
+def extract_and_save_channels(psg_id, raw, sfreq_per_channel, SIGNAL_TARGETS, eeg_founded, h5_path, verbose):
     with h5py.File(h5_path, "a") as f:
+        # List of channel after EEG extraction 
         channels = list(raw.ch_names)
         remaining_channels = [ch for ch in channels if ch not in eeg_founded]
-        remaining_channels = [
+        remaining_channels = [ # EEG found so remove potential weird channels
             ch for ch in channels
             if not (
                 ch.startswith("O1-") or 
-                ch.startswith("O2-") 
+                ch.startswith("O2-") or
+                ch.startswith("FZ-") 
             )
         ]
+        
+        # Go through all SIGNAL_TARGETS
         for signal_name, keywords in SIGNAL_TARGETS.items():
-            chs = find_channels(remaining_channels, signal_name, keywords, sub_id)
+            chs = find_channels(remaining_channels, signal_name, keywords, psg_id)
             for ch in chs:
                 if ch in remaining_channels:
                     remaining_channels.remove(ch) 
@@ -415,7 +434,7 @@ def extract_and_save_channels(sub_id, raw, sfreq_per_channel, SIGNAL_TARGETS, ee
                     }
                 dset = save_signal_to_h5(f, path, signal, attrs)
                 if dset is not None and verbose:
-                    print(f"[OK] {sub_id} {path} : {attrs['raw_names']}")
+                    print(f"[OK] {psg_id} {path} : {attrs['raw_names']}")
                     
             else:
                 ch_L, ch_R = chs
@@ -429,7 +448,7 @@ def extract_and_save_channels(sub_id, raw, sfreq_per_channel, SIGNAL_TARGETS, ee
                 attrs_L = {"raw_names": [ch_L], "fs": fs if fs else "None", "type": type_name}
                 dset = save_signal_to_h5(f, path_L, signal_L, attrs_L)
                 if dset is not None and verbose:
-                    print(f"[OK] {sub_id} {path_L} : {attrs_L['raw_names']}")
+                    print(f"[OK] {psg_id} {path_L} : {attrs_L['raw_names']}")
 
                 # Save Right Channel
                 harmonized_ch_R = f"{signal_name.upper()}_R"
@@ -437,7 +456,7 @@ def extract_and_save_channels(sub_id, raw, sfreq_per_channel, SIGNAL_TARGETS, ee
                 attrs_R = {"raw_names": [ch_R], "fs": fs if fs else "None", "type": type_name}
                 dset = save_signal_to_h5(f, path_R, signal_R, attrs_R)
                 if dset is not None and verbose:
-                    print(f"[OK] {sub_id} {path_R} : {attrs_R['raw_names']}")
+                    print(f"[OK] {psg_id} {path_R} : {attrs_R['raw_names']}")
 
                 # Save Differential Channel (L - R) if required
                 if (ch_R.upper() == "ECG-RA") and (len(signal_L) == len(signal_R)):
@@ -450,7 +469,7 @@ def extract_and_save_channels(sub_id, raw, sfreq_per_channel, SIGNAL_TARGETS, ee
                         }
                     dset = save_signal_to_h5(f, path, signal_diff, attrs)
                     if dset is not None and verbose:
-                        print(f"[OK] {sub_id} {path} : {attrs['raw_names']}")
+                        print(f"[OK] {psg_id} {path} : {attrs['raw_names']}")
 
 def save_signal_to_h5(f, path, signal, attrs):
     dset = f.create_dataset(path, data=signal.astype("float32"))

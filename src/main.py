@@ -67,12 +67,18 @@ def main():
     #             sub_id = psg_id.split('_')[0]
     #             session = psg_id.split('ses-')[-1]
     #             selected_subjects_sessions.append((sub_id, int(session)))
-    # selected_subjects = [
-    #     ("S0001111197789", 1),
-    #     ("S0001111245075", 1),
-    # ]
-    # mastersheet = mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in selected_subjects, axis=1)]
-    # print(len(selected_subjects), "selected subjects/sessions:", mastersheet[["sub_id", "session"]].values.tolist())
+    selected_subjects = [
+        ("S0001111832609", 1),
+        ("S0001112528447", 1),
+        ("S0001113559394", 1),
+        ("S0001117570190", 1),
+        ("S0001117652424", 1),
+        ("S0001118809002", 1),
+        ("S0001120237575", 1),
+        ("S0001121159031", 1),
+    ]
+    mastersheet = mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in selected_subjects, axis=1)]
+    print(len(selected_subjects), "selected subjects/sessions:", mastersheet[["sub_id", "session"]].values.tolist())
     ### End additional code to run only selected subs ### 
 
     # mastersheet = mastersheet[ ~(mastersheet['annot_path'].isna() & mastersheet['sleep_stage_path'].isna())] # remove the PSG that have any event or sleep annotations
@@ -101,6 +107,7 @@ def main():
     # print(len(mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in too_early_start, axis=1)])," PSG with sleep stages starting too_early.")
     # mastersheet = mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in too_late_start, axis=1)]
     # mastersheet = add_metatdata(mastersheet) 
+    # mastersheet = mastersheet[:16]
     rows = mastersheet.to_dict(orient="records")
 
     # --- Step 3: Convert EDF to H5 file --- 
@@ -117,25 +124,25 @@ def main():
         else:
             print("[INFO] Skipping EDF → h5: All files already exist and overwrite_h5 not allowed.")
         
-    # --- Step 4: Extract selected features from the H5 file ---
-    results = process_all_subjects(config, rows)
+    # # --- Step 4: Extract selected features from the H5 file ---
+    # results = process_all_subjects(config, rows)
 
-    # Collect failed subjects/sessions
-    failed = [
-        (row["sub_id"], row.get("session", None))
-        for row, res in zip(rows, results)
-        if res is None
-    ]
-    failed_df = pd.DataFrame(failed, columns=["sub_id", "session"])
-    if not config.dataset.session is None:
-        failed_csv_name = f"{config.dataset.name}_ses_{config.dataset.session}_failed_subjects.csv"
-    else:
-        failed_csv_name = f"{config.dataset.name}_failed_subjects_final.csv"
-    failed_df.to_csv(failed_csv_name, index=False)
-    print(f"[INFO] Saved failed subjects list to failed_subjects.csv")
-    print(f"[INFO] {len(failed)} subjects failed:")
-    for sub_id, session in failed:
-        print(f"    - {sub_id}, session={session}")
+    # # Collect failed subjects/sessions
+    # failed = [
+    #     (row["sub_id"], row.get("session", None))
+    #     for row, res in zip(rows, results)
+    #     if res is None
+    # ]
+    # failed_df = pd.DataFrame(failed, columns=["sub_id", "session"])
+    # if not config.dataset.session is None:
+    #     failed_csv_name = f"{config.dataset.name}_ses_{config.dataset.session}_failed_subjects.csv"
+    # else:
+    #     failed_csv_name = f"{config.dataset.name}_failed_subjects_final.csv"
+    # failed_df.to_csv(failed_csv_name, index=False)
+    # print(f"[INFO] Saved failed subjects list to failed_subjects.csv")
+    # print(f"[INFO] {len(failed)} subjects failed:")
+    # for sub_id, session in failed:
+    #     print(f"    - {sub_id}, session={session}")
 
 
 def process_all_subjects(config, rows):
@@ -207,7 +214,7 @@ def process_subject(config, row):
                      index = False)
 
     # --- Step 4d: Get sleep stages only for the night part ---
-    sleep_stages, sleep_onset_time = process_sleep_stages(
+    sleep_stages, sleep_onset_offset_sec, sleep_onset_time = process_sleep_stages(
         full_sleep_stages, 
         sfreq_global = row["sfreq_global"],
         start_time = row["start_time"],
@@ -231,7 +238,7 @@ def process_subject(config, row):
             processed_signals)
 
     # --- Step 4g: Exrtracted selected features --- 
-    extracted_features = extract_features(config, row, tmp_dir_sub, sleep_stages, sleep_onset_time, processed_signals, df_events, windows_dict)
+    extracted_features = extract_features(config, row, tmp_dir_sub, full_sleep_stages, sleep_stages, sleep_onset_offset_sec, sleep_onset_time, processed_signals, df_events, windows_dict)
 
     # --- Step 4h: Save results ---
     save_features(config, row, extracted_features)

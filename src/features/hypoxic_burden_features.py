@@ -5,19 +5,34 @@ import neurokit2 as nk
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import filtfilt, find_peaks
+from scipy.signal import filtfilt, find_peaks, resample
 
 
 # Main extraction def
-def extract_hb(row, spo2_data, df_events, full_sleep_stages):
+def extract_hb(row, spo2_data, df_events, full_sleep_stages, verbose):
     # Read inputs
     psg_id = f"sub-{row['sub_id']}_ses-{row['session']}"
-    sfreq_global = row['sfreq_global']
     if not spo2_data:
-        print(f"{psg_id}: No SPO2 data available for this subject")
+        if verbose:
+            print(f"{psg_id}: No SpO2 data found → skipping")
+        return None
+    
+    # Downsample resp to match sfreq_global
+    sfreq_global = float(row['sfreq_global'])
+    sfreq_spo2  = spo2_data['sfreq_signal']
+    ratio = sfreq_global / sfreq_spo2
+    if np.isclose(ratio, round(ratio)):
+        factor = int(round(ratio))
+        spo2_signal = spo2_data['full_signal'][::factor]
+        full_sleep_stages = full_sleep_stages[::factor]
     else:
-        spo2_signal = spo2_data['full_signal']
-        sfreq_spo2  = spo2_data['sfreq_signal']
+        # Compute new number of samples
+        n_samples = int(round(len(spo2_data['full_signal']) * sfreq_spo2 / sfreq_global))
+        spo2_signal = resample(spo2_data['full_signal'], n_samples)
+        
+        # Resample sleep stages by nearest-neighbor
+        idx = np.linspace(0, len(full_sleep_stages) - 1, n_samples).astype(int)
+        full_sleep_stages = full_sleep_stages[idx]
 
     # Extract apnea events (end time of each event)
     df_apnea = (
@@ -27,14 +42,18 @@ def extract_hb(row, spo2_data, df_events, full_sleep_stages):
     )
     df_apnea["end_time"] = df_apnea["onset"].astype(float) + df_apnea["duration"].astype(float)
     apnea_event_times = np.array(df_apnea["end_time"])
-
+    
+    # If no apnea events or less than 2 → mark apnea HB as NaN
     if len(apnea_event_times) < 2:
-        print(f"{psg_id}: len(apnea_event_times)={len(apnea_event_times)} < 2 → skipping")
-        return None
+        if verbose:
+            print(f"{psg_id}: Not enough apnea events so apnea HB set to NaN")
+        HB_apnea = (np.nan, np.nan, np.nan)
+    else: # Compute HB apnea
+        df_apnea_hb = calc_hypoxic_burden(apnea_event_times, spo2_signal, sfreq_spo2)
+        HB_apnea = hb_per_stages(df_apnea_hb, full_sleep_stages, sfreq_spo2)
 
-    # Compute HB apnea
-    df_apnea_hb = calc_hypoxic_burden(apnea_event_times, spo2_signal, sfreq_spo2)
-    HB_per_hour_apnea, HB_NREM_per_hour_apnea, HB_REM_per_hour_apnea = hb_per_stages(df_apnea_hb, full_sleep_stages, sfreq_global)
+    HB_per_hour_apnea, HB_NREM_per_hour_apnea, HB_REM_per_hour_apnea = HB_apnea
+
 
     # Extract desaturation events (mid time of each event)
     df_desat = (
@@ -47,24 +66,28 @@ def extract_hb(row, spo2_data, df_events, full_sleep_stages):
     )
     if len(df_desat) == 0: # If no desat events found → detect automatically
         df_desat = detect_oxygen_desaturation(spo2_signal, is_plot=False)
+        
     df_desat["mid_time"] = df_desat["onset"].astype(float) + (df_desat["duration"].astype(float)/2)
     desat_event_times = np.array(df_desat["mid_time"])
 
+    # If no desats or <2 → mark desat HB as NaN
     if len(desat_event_times) < 2:
-        print(f"{psg_id}: len(desat_event_times)={len(desat_event_times)} < 2 → skipping")
-        return None
+        if verbose:
+            print(f"{psg_id}: Not enough desaturation events → desat HB set to NaN")
+        HB_desat = (np.nan, np.nan, np.nan)
+    else:
+        df_desat_hb = calc_hypoxic_burden(desat_event_times, spo2_signal, sfreq_spo2)
+        HB_desat = hb_per_stages(df_desat_hb, full_sleep_stages, sfreq_spo2)
 
-    # Compute HB desaturation
-    df_desat_hb = calc_hypoxic_burden(desat_event_times, spo2_signal, sfreq_spo2)   
-    HB_per_hour_desat, HB_NREM_per_hour_desat, HB_REM_per_hour_desat = hb_per_stages(df_desat_hb, full_sleep_stages, sfreq_global)
+    HB_per_hour_desat, HB_NREM_per_hour_desat, HB_REM_per_hour_desat = HB_desat
 
     results = {
-        "hb_per_hour_apnea@WN": HB_per_hour_apnea,
-        "hb_per_hour_apnea@REM": HB_REM_per_hour_apnea,
-        "hb_per_hour_apnea@NREM": HB_NREM_per_hour_apnea,
         "hb_per_hour_desat@WN": HB_per_hour_desat,
-        "hb_per_hour_desat@REM": HB_REM_per_hour_desat,
         "hb_per_hour_desat@NREM": HB_NREM_per_hour_desat,
+        "hb_per_hour_desat@REM": HB_REM_per_hour_desat,
+        "hb_per_hour_apnea@WN": HB_per_hour_apnea,
+        "hb_per_hour_apnea@NREM": HB_NREM_per_hour_apnea,
+        "hb_per_hour_apnea@REM": HB_REM_per_hour_apnea,
     }
     return results
 
@@ -82,8 +105,7 @@ B = [0.000109398212241, 0.000514594526374, 0.001350397179936, 0.002341700062534,
 
 BAD_SPO2_THRESHOLD = 80
 
-
-def filter_spo2(spo2_arr, spo2_sfreq):
+def filter_spo2(spo2_arr, spo2_sfreq, event_end_time, verbose=False, time_span=120):
     # Replace abnormal values with the mean
     spo2_mean = np.mean(spo2_arr[spo2_arr >= BAD_SPO2_THRESHOLD])
     spo2_arr[spo2_arr < BAD_SPO2_THRESHOLD] = spo2_mean
@@ -100,16 +122,18 @@ def filter_spo2(spo2_arr, spo2_sfreq):
     return spo2_filtered
 
     
-def calc_hypoxic_burden(event_times, spo2_arr, sfreq_spo2, time_span=120):
+def calc_hypoxic_burden(event_times, spo2_arr, sfreq_spo2, verbose=False, time_span=120):
     # Assume the duration of a respiratory event is 10–120 s; the maximum delay of hypoxemia caused by a respiratory event is 120 s
     all_ah_related_spo2 = []
     good_event_ids = []
     for ei, et in enumerate(event_times):
-        nearby_spo2 = spo2_arr[int(et - time_span) * sfreq_spo2: int(et + time_span) * sfreq_spo2]
+        start_idx = int((et - time_span) * sfreq_spo2)
+        end_idx = int((et + time_span) * sfreq_spo2)
+        nearby_spo2 = spo2_arr[start_idx:end_idx]
         if len(nearby_spo2) < 2*time_span*sfreq_spo2 \
                 or np.mean(nearby_spo2 < BAD_SPO2_THRESHOLD)>0.3:
             continue
-        filtered_spo2 = filter_spo2(nearby_spo2, sfreq_spo2)
+        filtered_spo2 = filter_spo2(nearby_spo2, sfreq_spo2, et, verbose, time_span)
         assert sfreq_spo2 == 1, f"Unexpected SpO₂ frequency: {sfreq_spo2}"
         all_ah_related_spo2.append(filtered_spo2)
         good_event_ids.append(ei)
@@ -133,16 +157,16 @@ def calc_hypoxic_burden(event_times, spo2_arr, sfreq_spo2, time_span=120):
     return res
 
 
-def hb_per_stages(df_hb, full_sleep_stages, sfreq_global):
+def hb_per_stages(df_hb, full_sleep_stages, sfreq_spo2):
     # Add Sleep Stages 
-    full_sleep_stages_sec = full_sleep_stages[::int(sfreq_global)]
+    full_sleep_stages_sec = full_sleep_stages[::int(sfreq_spo2)]
     ids = np.clip(df_hb['EventTime'].astype(int).values, 0, len(full_sleep_stages_sec)-1)
     df_hb['Stage'] = full_sleep_stages_sec[ids]
 
     # Start and end sleep in sec
     sleep_ids = np.where(np.isin(full_sleep_stages, [1, 2, 3, 4]))[0]
-    sleep_start = int(sleep_ids[0] / sfreq_global)
-    sleep_end = int((sleep_ids[-1] + 1) / sfreq_global)
+    sleep_start = int(sleep_ids[0] / sfreq_spo2)
+    sleep_end = int((sleep_ids[-1] + 1) / sfreq_spo2)
 
     # Total HB during sleep (per hour)
     total_HB = df_hb['HB'][(df_hb['EventTime'] >= sleep_start) & (df_hb['EventTime'] < sleep_end)].sum()
