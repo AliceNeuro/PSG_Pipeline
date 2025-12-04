@@ -13,7 +13,7 @@ paths:
 output:
   overwrite_mastersheet : false
   overwrite_h5: false
-  overwrite_events: true
+  overwrite_events: false
   overwrite_old_features: true # overwrite existing extracted features
 
 features:

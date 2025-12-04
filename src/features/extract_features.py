@@ -36,7 +36,7 @@ def extract_features(config, row, tmp_dir_sub, full_sleep_stages, sleep_stages, 
 
         # Add more features as needed
     }
-
+    psg_id = f"sub-{row['sub_id']}_ses-{row['session']}"
     extracted_features = {}
     selected = config.features.selected or []
     extract_all = config.features.extract_all
@@ -101,14 +101,14 @@ def extract_features(config, row, tmp_dir_sub, full_sleep_stages, sleep_stages, 
                     if isinstance(result, list):
                         result = collapse_stage_features_to_dict(result)
                     if not isinstance(result, dict):
-                        print(f"[WARNING] Sub {row['sub_id']}: Feature function '{feature_name}' did not return a dict.")
+                        print(f"[WARNING] {psg_id}: Feature function '{feature_name}' did not return a dict.")
                     else:
                         extracted_features.update(result)
                 else: 
-                    print(f"[WARNING] Sub {row['sub_id']}: Feature '{feature_name}' was not computed (potentially no valid R-peaks or clean windows found).")
+                    print(f"[WARNING] {psg_id}: Feature '{feature_name}' was not computed.")
 
             except Exception as e:
-                print(f"[ERROR] Sub {row['sub_id']}: Failed to extract '{feature_name}': {e}")
+                print(f"[ERROR] {psg_id}: Failed to extract '{feature_name}': {e}")
                 traceback.print_exc() 
 
     return extracted_features

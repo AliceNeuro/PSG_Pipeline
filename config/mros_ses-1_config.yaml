@@ -13,13 +13,13 @@ paths:
 output:
   overwrite_mastersheet : false
   overwrite_h5: false
-  overwrite_events: true
+  overwrite_events: false
   overwrite_old_features: true # overwrite existing extracted features
 
 features:
   extract_all: false 
   selected: # not looked if extract_all = true
-    - ab 
+    - ab
     - hb
     - vb
 
@@ -41,6 +41,6 @@ analysis:
 
 run:
   verbose: false
-  parallel: false
+  parallel: true
   num_workers: 16
   logging_level: info  # debug / info / warning / error

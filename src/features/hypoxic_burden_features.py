@@ -34,6 +34,9 @@ def extract_hb(row, spo2_data, df_events, full_sleep_stages, verbose):
         idx = np.linspace(0, len(full_sleep_stages) - 1, n_samples).astype(int)
         full_sleep_stages = full_sleep_stages[idx]
 
+    if np.nanmedian(spo2_signal) < 1: 
+        spo2_signal = spo2_signal * 1e6
+
     # Extract apnea events (end time of each event)
     df_apnea = (
         df_events[df_events["event_type"].astype(str).str.contains("pnea", case=False, na=False)]
@@ -49,7 +52,7 @@ def extract_hb(row, spo2_data, df_events, full_sleep_stages, verbose):
             print(f"{psg_id}: Not enough apnea events so apnea HB set to NaN")
         HB_apnea = (np.nan, np.nan, np.nan)
     else: # Compute HB apnea
-        df_apnea_hb = calc_hypoxic_burden(apnea_event_times, spo2_signal, sfreq_spo2)
+        df_apnea_hb = calc_hypoxic_burden(apnea_event_times, spo2_signal, sfreq_spo2, psg_id, verbose)
         HB_apnea = hb_per_stages(df_apnea_hb, full_sleep_stages, sfreq_spo2)
 
     HB_per_hour_apnea, HB_NREM_per_hour_apnea, HB_REM_per_hour_apnea = HB_apnea
@@ -66,6 +69,8 @@ def extract_hb(row, spo2_data, df_events, full_sleep_stages, verbose):
     )
     if len(df_desat) == 0: # If no desat events found → detect automatically
         df_desat = detect_oxygen_desaturation(spo2_signal, is_plot=False)
+        df_desat["onset"] = df_desat["onset"] / sfreq_spo2
+        df_desat["duration"] = df_desat["duration"] / sfreq_spo2
         
     df_desat["mid_time"] = df_desat["onset"].astype(float) + (df_desat["duration"].astype(float)/2)
     desat_event_times = np.array(df_desat["mid_time"])
@@ -76,7 +81,7 @@ def extract_hb(row, spo2_data, df_events, full_sleep_stages, verbose):
             print(f"{psg_id}: Not enough desaturation events → desat HB set to NaN")
         HB_desat = (np.nan, np.nan, np.nan)
     else:
-        df_desat_hb = calc_hypoxic_burden(desat_event_times, spo2_signal, sfreq_spo2)
+        df_desat_hb = calc_hypoxic_burden(desat_event_times, spo2_signal, sfreq_spo2, psg_id, verbose)
         HB_desat = hb_per_stages(df_desat_hb, full_sleep_stages, sfreq_spo2)
 
     HB_per_hour_desat, HB_NREM_per_hour_desat, HB_REM_per_hour_desat = HB_desat
@@ -105,7 +110,7 @@ B = [0.000109398212241, 0.000514594526374, 0.001350397179936, 0.002341700062534,
 
 BAD_SPO2_THRESHOLD = 80
 
-def filter_spo2(spo2_arr, spo2_sfreq, event_end_time, verbose=False, time_span=120):
+def filter_spo2(spo2_arr, spo2_sfreq, verbose, time_span=120):
     # Replace abnormal values with the mean
     spo2_mean = np.mean(spo2_arr[spo2_arr >= BAD_SPO2_THRESHOLD])
     spo2_arr[spo2_arr < BAD_SPO2_THRESHOLD] = spo2_mean
@@ -122,7 +127,7 @@ def filter_spo2(spo2_arr, spo2_sfreq, event_end_time, verbose=False, time_span=1
     return spo2_filtered
 
     
-def calc_hypoxic_burden(event_times, spo2_arr, sfreq_spo2, verbose=False, time_span=120):
+def calc_hypoxic_burden(event_times, spo2_arr, sfreq_spo2, psg_id, verbose, time_span=120):
     # Assume the duration of a respiratory event is 10–120 s; the maximum delay of hypoxemia caused by a respiratory event is 120 s
     all_ah_related_spo2 = []
     good_event_ids = []
@@ -130,30 +135,83 @@ def calc_hypoxic_burden(event_times, spo2_arr, sfreq_spo2, verbose=False, time_s
         start_idx = int((et - time_span) * sfreq_spo2)
         end_idx = int((et + time_span) * sfreq_spo2)
         nearby_spo2 = spo2_arr[start_idx:end_idx]
-        if len(nearby_spo2) < 2*time_span*sfreq_spo2 \
-                or np.mean(nearby_spo2 < BAD_SPO2_THRESHOLD)>0.3:
+        if len(nearby_spo2) < 2 * time_span * sfreq_spo2:
+            if verbose:
+                print(f"[WARNING] {psg_id} Event {ei}: too short segment, skipping")
             continue
-        filtered_spo2 = filter_spo2(nearby_spo2, sfreq_spo2, et, verbose, time_span)
-        assert sfreq_spo2 == 1, f"Unexpected SpO₂ frequency: {sfreq_spo2}"
+        if np.mean(nearby_spo2 < BAD_SPO2_THRESHOLD) > 0.9:
+            if verbose:
+                print(f"[WARNING] {psg_id} Event {ei}: too many bad SpO2 values, skipping")
+            continue
+
+        filtered_spo2 = filter_spo2(nearby_spo2, sfreq_spo2, verbose, time_span)
+        if filtered_spo2.size < 2:
+            if verbose:
+                print(f"[WARNING] {psg_id} Event {ei}: filtered SpO2 too short, skipping")
+            continue
+
         all_ah_related_spo2.append(filtered_spo2)
         good_event_ids.append(ei)
     
+
     # Get average drop (start and end on average curve)
+    # Convert to array safely
+    if len(all_ah_related_spo2) == 0:
+        if verbose:
+            print(f"[WARNING] {psg_id} No valid SpO2 segments found. Returning empty DataFrame.")
+        return pd.DataFrame({'EventTime': event_times, 'HB': [np.nan]*len(event_times)})
+
     all_spo2_dest = np.array(all_ah_related_spo2)
     avg_spo2 = all_spo2_dest.mean(axis=0)
-    avg_spo2 = filtfilt(B, 1, avg_spo2, axis=0, padtype='odd')
-    peaks, _ = find_peaks(avg_spo2)
-    start_secs = peaks[np.where(peaks < time_span)[0][-1]]
-    end_secs = peaks[np.where(peaks > time_span)[0][0]]
 
+     # Filter safely
+    try:
+        if avg_spo2.size > 3 * len(B):
+            avg_spo2 = filtfilt(B, 1, avg_spo2, axis=0, padtype='odd')
+        else:
+            if verbose:
+                print(f"[WARNING] {psg_id} avg_spo2 too short for filtfilt (length={len(avg_spo2)}), skipping filter")
+    except Exception as e:
+        if verbose:
+            print(f"[WARNING] {psg_id} filtfilt failed: {e}")
+        return pd.DataFrame({'EventTime': event_times, 'HB': [np.nan]*len(event_times)})
+    
+     # Detect peaks safely
+    peaks, _ = find_peaks(avg_spo2)
+    if len(peaks) == 0:
+        if verbose:
+            print(f"[WARNING] {psg_id} No peaks detected in avg_spo2, skipping HB calculation")
+        return pd.DataFrame({'EventTime': event_times, 'HB': [np.nan]*len(event_times)})
+
+    start_idxs = np.where(peaks < time_span)[0]
+    end_idxs = np.where(peaks > time_span)[0]
+    if len(start_idxs) == 0 or len(end_idxs) == 0:
+        if verbose:
+            print(f"[WARNING] {psg_id} Cannot find start/end peaks, skipping HB calculation")
+        return pd.DataFrame({'EventTime': event_times, 'HB': [np.nan]*len(event_times)})
+    
+
+    start_secs = peaks[start_idxs[-1]]
+    end_secs = peaks[end_idxs[0]]
+
+    # Compute hypoxic burden
     burdens = []
     for spo2_dest_curve in all_spo2_dest:
-        baseline_spo2 = np.max(spo2_dest_curve[time_span - 100:time_span])
-        interest_spo2 = spo2_dest_curve[start_secs: end_secs]
-        burdens.append( sum(baseline_spo2 - interest_spo2)/60 )
+        if len(spo2_dest_curve) <= end_secs:
+            if verbose:
+                print(f"[WARNING] {psg_id} Event curve shorter than expected, skipping")
+            burdens.append(np.nan)
+            continue
 
-    res = pd.DataFrame(data={'EventTime':event_times})
-    res.loc[good_event_ids, 'HB'] = burdens
+        baseline_spo2 = np.max(spo2_dest_curve[max(0, time_span - 100):time_span])
+        interest_spo2 = spo2_dest_curve[start_secs:end_secs]
+        burdens.append(np.sum(baseline_spo2 - interest_spo2) / 60)
+
+    # Build result DataFrame
+    res = pd.DataFrame(data={'EventTime': event_times})
+    for idx, bi in zip(good_event_ids, burdens):
+        res.loc[idx, 'HB'] = bi
+    
     return res
 
 
@@ -194,7 +252,7 @@ def hb_per_stages(df_hb, full_sleep_stages, sfreq_spo2):
     return HB_per_hour, HB_NREM_per_hour, HB_REM_per_hour
 
 
-def detect_oxygen_desaturation(spo2, is_plot=False, duration_max=120, return_type='pd'):
+def detect_oxygen_desaturation(spo2, is_plot=True, duration_max=120, return_type='pd'):
     spo2_max = spo2[0]  # Initialize maximum SpO2 value
     spo2_max_index = 1  # Initialize index of maximum SpO2 value
     spo2_min = 100  # Initialize minimum SpO2 value
@@ -291,4 +349,8 @@ def detect_oxygen_desaturation(spo2, is_plot=False, duration_max=120, return_typ
                         des_flag = 0
                         prob_end = []
 
-    return pd.DataFrame(data={'onset':des_onset_pred_set, 'duration':des_duration_pred_set, 'desaturation':des_level_set})
+
+    if return_type=='tuple':
+        return des_onset_pred_set, des_duration_pred_set, des_level_set
+    else:
+        return pd.DataFrame(data={'onset':des_onset_pred_set, 'duration':des_duration_pred_set, 'desaturation':des_level_set})

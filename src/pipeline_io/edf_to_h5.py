@@ -324,9 +324,19 @@ def find_channels(channel_names, signal_name, keywords, psg_id):
     
     # Adjust Therm - Airflow selection 
     if any("AIRFLOW" in ch.upper() for ch in matches) and len(matches) > 1:
-        matches = [m for m in matches if "NEW" in m.upper()]
-        if len(matches) != 1:
-            matches = [m for m in matches if m.upper() == "AIRFLOW"]
+        print("1", matches)
+        new_matches = [m for m in matches if "NEW" in m.upper()]
+        print("2", new_matches)
+        if len(new_matches) != 1:
+            new_matches = [m for m in matches if m.upper() == "AIRFLOW"]
+            print("3", new_matches)
+            if len(new_matches) != 1:
+                matches = [m for m in matches if "AIRFLOW" not in m.upper()]
+                print("4", matches)
+            else:
+                matches = new_matches
+        else:
+            matches = new_matches
     
     if any("CFLOW" in ch.replace("-", "").upper() for ch in matches) and len(matches) > 1:
         matches = [m for m in matches if "CFLOW" not in m.replace("-", "").upper()]

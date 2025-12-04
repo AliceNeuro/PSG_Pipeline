@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import scipy.io as sio
-from scipy.signal import resample
+from scipy.signal import resample, find_peaks
 from scipy.stats import mode
 
 def extract_vb(row, tmp_dir_sub, resp_data, full_sleep_stages, verbose):
@@ -35,10 +35,17 @@ def extract_vb(row, tmp_dir_sub, resp_data, full_sleep_stages, verbose):
         idx = np.linspace(0, len(full_sleep_stages) - 1, n_samples).astype(int)
         full_sleep_stages = full_sleep_stages[idx]
     
-    # Geat df_breath
+    # Check if full_resp OK
+    if not signal_check(full_resp, sfreq_resp, psg_id):
+        return None
+
+    # Geat df_breath  
     breath_mat = tmp_dir_sub / f"breath_{psg_id}.mat"
     df_breath = get_breath_array(breath_mat, full_resp, sfreq_resp, verbose)
-    
+    if df_breath.empty:
+        if verbose:
+            print(f"[WARNING] {psg_id}: No breaths detected → skipping VB extraction")
+        return None
     # Reduce df_breath 
     sleep_ids = np.where(np.isin(full_sleep_stages, [1, 2, 3, 4]))[0]
     start_index = sleep_ids[0]
@@ -92,6 +99,57 @@ def extract_vb(row, tmp_dir_sub, resp_data, full_sleep_stages, verbose):
 
     return results
 
+
+def signal_check(full_resp, sfreq_resp, psg_id):
+    """Minimal sanity check for nasal pressure before VB extraction."""
+    full_resp = full_resp.flatten()
+    
+    # Basic checks
+    if full_resp is None or len(full_resp) < 100:
+        print(f"[WARNING] {psg_id}: resp signal too short -> skipping")
+        return False
+    
+    if np.isnan(full_resp).all():
+        print(f"[WARNING] {psg_id}: resp signal all NaN -> skipping")
+        return False
+    
+    if np.any(np.isnan(full_resp)):
+        print(f"[WARNING] {psg_id}: resp signal contains NaN -> linear interpolation")
+        nans = np.isnan(full_resp)
+        if nans.all():
+            return False
+        full_resp[nans] = np.interp(np.flatnonzero(nans), np.flatnonzero(~nans), full_resp[~nans])
+
+    if sfreq_resp <= 0 or np.isnan(sfreq_resp):
+        print(f"[WARNING] {psg_id}: invalid fs -> skipping")
+        return False
+
+    # # Check peak-to-peak amplitude
+    # ptp = np.ptp(full_resp)
+    # if ptp < 0.1:
+    #     print(f"[WARNING] {psg_id}: signal too flat (ptp={ptp:.5f}) -> skipping")
+    #     return False
+    
+    # # Rough peak count (raw signal, no smoothing)
+    # peaks, _ = find_peaks(full_resp, height=0.03*ptp, distance=int(sfreq_resp*2))  # min 2 s between peaks
+    # if len(peaks) < 20:  # very few peaks → likely to fail .p function
+    #     print(f"[WARNING] {psg_id}: too few peaks ({len(peaks)}) -> skipping")
+    #     return False
+    
+    # Rough estimate of "usable" breaths
+    # strong_peaks, _ = find_peaks(
+    #     full_resp,
+    #     height=0.2*ptp,         # only peaks above 20% of ptp
+    #     distance=int(sfreq_resp*2)
+    # )
+
+    # if len(strong_peaks) < 50:
+    #     print(f"[WARNING] {psg_id}: too few strong breaths ({len(strong_peaks)}) -> skip")
+    #     return False
+
+    return True  # signal passes
+
+
 def get_breath_array(breath_mat, full_resp, sfreq_resp, verbose):
     sio.savemat(breath_mat, {'nas_pres': full_resp, 
                             'fs': sfreq_resp, 
@@ -110,13 +168,17 @@ def get_breath_array(breath_mat, full_resp, sfreq_resp, verbose):
         "-batch",
         f'addpath("{mat_breath_script.parent}"); call_breathtable("{breath_mat}")'
     ]
+    try:
+        subprocess.run(
+                    command,
+                    check=True,
+                    stdout=None if verbose else subprocess.DEVNULL,
+                    stderr=None if verbose else subprocess.DEVNULL
+                )
+    except subprocess.CalledProcessError as e:
+        print(f"[ERROR] MATLAB breath detection failed for file: {breath_mat}: {e}")
+        return pd.DataFrame()  # return empty DataFrame on failure
 
-    subprocess.run(
-                command,
-                check=True,
-                stdout=None if verbose else subprocess.DEVNULL,
-                stderr=None if verbose else subprocess.DEVNULL
-            )
 
     # Load output from MATLAB
     breath_data = sio.loadmat(breath_mat)
