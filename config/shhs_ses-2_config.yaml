@@ -19,8 +19,6 @@ output:
 features:
   extract_all: false 
   selected: # not looked if extract_all = true
-    - ab
-    - hb
     - vb
 
 analysis:

@@ -6,9 +6,12 @@ def extract_ab(row, df_events, sleep_stages, sleep_onset_offset_sec):
     sfreq_global = row["sfreq_global"]
 
     # Keep only arousals and RERA
-    df_arousals = df_events[
-        df_events["event_type"].str.contains("arousal|rera", case=False, na=False)
-    ].copy() # Adding rera events as arousals
+    if "event_type" in df_events.columns:
+        df_arousals = df_events[
+            df_events["event_type"].str.contains("arousal|rera", case=False, na=False)
+        ].copy() # Adding rera events as arousals
+    else: 
+        df_arousals = pd.DataFrame()
 
     # Drop useless columns if present
     for col in ["channel", "lowest_spo2", "desaturation"]:
@@ -22,10 +25,13 @@ def extract_ab(row, df_events, sleep_stages, sleep_onset_offset_sec):
             f"total_min@{s}": 0.0
             for s in suffixes
         } | {
-            f"arousal_min@{s}": 0.0
+            f"arousal_min@{s}": np.nan
             for s in suffixes
         } | {
-            f"arousal_burden_percent@{s}": 0.0
+            f"arousal_burden@{s}": np.nan
+            for s in suffixes
+        } | {
+            f"arousal_index@{s}": np.nan
             for s in suffixes
         }
 
@@ -63,9 +69,9 @@ def compute_arousal_burden_for_stage(suffix, sfreq_global, sleep_stages, stage_c
     if TST_min == 0:
         return {
             f"total_min@{suffix}": TST_min,
-            f"arousal_min@{suffix}": 0.0,
-            f"arousal_burden@{suffix}": 0.0,
-            f"arousal_index@{suffix}": 0.0
+            f"arousal_min@{suffix}": np.nan,
+            f"arousal_burden@{suffix}": np.nan,
+            f"arousal_index@{suffix}": np.nan
         }
 
     # -------- Filter arousals occurring during these stages --------
@@ -88,7 +94,7 @@ def compute_arousal_burden_for_stage(suffix, sfreq_global, sleep_stages, stage_c
             f"total_min@{suffix}": TST_min,
             f"arousal_min@{suffix}": 0.0,
             f"arousal_burden@{suffix}": 0.0,
-            f"arousal_index@{suffix}": 0.0
+            f"arousal_index@{suffix}": 0.0 
         }
 
     # -------- Merge overlapping arousals --------

@@ -3,12 +3,13 @@ import pandas as pd
 import math
 
 # === CONFIG ===
-dataset_name = "hsp_mgb" 
-run_date = "20251121"
-results_path = f"/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/{dataset_name}/run_{run_date}/"
+dataset_name = "shhs_ses-1" 
+run_date = "20251215"
+feature = "vb"
+results_path = f"/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/{dataset_name}/run_{run_date}_{feature}/"
 print(results_path)
 # results_path = "/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/shhs_ses-1/run_20251013"
-output_final = os.path.join(results_path, f"{dataset_name}_extracted_features_all.csv")
+output_final = os.path.join(results_path, f"{dataset_name}_{feature}_all.csv")
 sub_id_col = "sub_id"
 final_df = None
 
@@ -92,6 +93,6 @@ for stage in stage_types:
     stage_df = stage_df.sort_values(by=sub_id_col).reset_index(drop=True)
     
     # Save to CSV
-    stage_csv_path = os.path.join(results_path, f"{dataset_name}_extracted_features_{stage}.csv")
+    stage_csv_path = os.path.join(results_path, f"{dataset_name}_{feature}_{stage}.csv")
     stage_df.to_csv(stage_csv_path, index=False)
     print(f"[INFO] Saved {stage_csv_path} with {stage_df.shape[1]-1} stage columns")

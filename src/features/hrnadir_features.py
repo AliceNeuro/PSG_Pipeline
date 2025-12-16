@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import neurokit2 as nk
 
-def extract_hrnadir(config, sub_id, ecg_data, sleep_stages):
+def extract_hrnadir(config, psg_id, ecg_data, sleep_stages):
     """
     Compute HRnadir (minimum heart rate) from ECG and sleep stage data.
 
@@ -32,13 +32,13 @@ def extract_hrnadir(config, sub_id, ecg_data, sleep_stages):
     """
 
     if ecg_data is None:
-        print(f"[WARNING] Sub {sub_id}:  ecg_data is None, skipping HRnadir computation.")
+        print(f"[WARNING] {psg_id}:  ecg_data is None, skipping HRnadir computation.")
         return None
 
     rpeaks = ecg_data.get("clean_rpeaks")
     sfreq_ecg = ecg_data.get("sfreq_signal")
     if rpeaks is None or sfreq_ecg is None or len(rpeaks) == 0:
-        print(f"[WARNING] Sub {sub_id}:  rpeaks is None, skipping HRnadir computation.")
+        print(f"[WARNING] {psg_id}:  rpeaks is None, skipping HRnadir computation.")
         return None
 
     # Compute HR trace in bpm
@@ -58,7 +58,7 @@ def extract_hrnadir(config, sub_id, ecg_data, sleep_stages):
 
     if config.run.verbose: # Should be 0 because already done in clean rpeaks
         n_nans = np.isnan(hr).sum()
-        print(f"[WARNING] Sub {sub_id}: Outliers in HR trace: {new_nans} / {len(hr)} "
+        print(f"[WARNING] {psg_id}: Outliers in HR trace: {new_nans} / {len(hr)} "
               f"({new_nans / len(hr) * 100:.2f}%)")
 
     # Smooth HR with 10-second rolling median (ignores NaNs)
@@ -68,7 +68,7 @@ def extract_hrnadir(config, sub_id, ecg_data, sleep_stages):
     hr[np.isnan(sleep_stages)] = np.nan
 
     if np.all(np.isnan(hr)):
-        print(f"[WARNING] Sub {sub_id}:  All HR values are NaN, skipping HRnadir computation.")
+        print(f"[WARNING] {psg_id}:  All HR values are NaN, skipping HRnadir computation.")
         return None
 
     # Index of minimum HR

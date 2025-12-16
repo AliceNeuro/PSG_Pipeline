@@ -168,7 +168,9 @@ def spo2_analysis(config, h5_path, full_sleep_stages, tmp_dir_sub):
 def resp_analysis(config, h5_path, full_sleep_stages, tmp_dir_sub):
     keys = {
         "NASAL_PRESSURE": "signals/RESP/RESP_NASAL_PRESSURE",
-        "THERM": "signals/RESP/RESP_THERM"
+        "THERM": "signals/RESP/RESP_THERM",
+        "ABDOMINAL": "signals/RESP/RESP_ABDOMINAL",
+        "THORACIC": "signals/RESP/RESP_THORACIC",
     }
     results = {}
 

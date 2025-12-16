@@ -6,8 +6,9 @@ from features.hrnadir_features import extract_hrnadir
 from features.hypoxic_burden_features import extract_hb
 from features.arousal_burden_features import extract_ab
 from features.ventilatory_burden_features import extract_vb
+from features.aasm_features import extract_aasm
 
-def extract_features(config, row, tmp_dir_sub, full_sleep_stages, sleep_stages, sleep_onset_offset_sec, sleep_onset_time, processed_signals, df_events, windows_dict):
+def extract_features(config, row, tmp_dir_sub, full_sleep_stages, sleep_stages, sleep_onset_offset_sec, sleep_onset_time, processed_signals, df_events, windows_dict):       
     FEATURE_REGISTRY = {
         "hrv": {
             "func": extract_hrv,
@@ -19,7 +20,7 @@ def extract_features(config, row, tmp_dir_sub, full_sleep_stages, sleep_stages, 
         },
         "hrnadir": {
             "func": extract_hrnadir,
-            "args": ["config", "sub_id", "ecg_data", "sleep_stages"],
+            "args": ["config", "psg_id", "ecg_data", "sleep_stages"],
         },
         "hb": {
             "func": extract_hb,
@@ -33,6 +34,10 @@ def extract_features(config, row, tmp_dir_sub, full_sleep_stages, sleep_stages, 
             "func": extract_vb,
             "args": ["row", "tmp_dir_sub", "resp_data", "sleep_stages", "verbose"],
         },
+        "aasm": {
+            "func": extract_aasm,
+            "args": ["full_sleep_stages", "sleep_stages", "df_events", "sfreq_global", "psg_id"],
+        },
 
         # Add more features as needed
     }
@@ -40,11 +45,12 @@ def extract_features(config, row, tmp_dir_sub, full_sleep_stages, sleep_stages, 
     extracted_features = {}
     selected = config.features.selected or []
     extract_all = config.features.extract_all
+    verbose = config.run.verbose
 
     for feature_name, info in FEATURE_REGISTRY.items():
         if extract_all or feature_name in selected:
             func = info["func"]
-            if config.run.verbose: 
+            if verbose: 
                 print(f"[INFO] Extracting feature: {feature_name}")
 
             try:
@@ -69,16 +75,17 @@ def extract_features(config, row, tmp_dir_sub, full_sleep_stages, sleep_stages, 
                 # --- RESP data selection ---
                 resp_data = None
                 if feature_name == "vb":
-                    if "NASAL_PRESSURE" in processed_signals:
-                        resp_data = processed_signals["NASAL_PRESSURE"]
-                    elif "THERM" in processed_signals:
-                        resp_data = processed_signals["THERM"]
+                    resp_data = {}
+                    for resp_channel in ["NASAL_PRESSURE", "ABDOMINAL", "THORACIC", "THERM"]:
+                        if resp_channel in processed_signals:
+                            resp_data[resp_channel] = processed_signals[resp_channel]
+                    if not resp_data and verbose:
+                        print(f"[ERROR] {psg_id}: No correct respiratory channels.")
                     
                 # --- Attribute All Data ---     
                 all_data = {
                     "config": config,
                     "row": row,
-                    "sub_id" : row["sub_id"],
                     "tmp_dir_sub": tmp_dir_sub,
                     "full_sleep_stages": full_sleep_stages,
                     "sleep_stages": sleep_stages,
@@ -90,6 +97,7 @@ def extract_features(config, row, tmp_dir_sub, full_sleep_stages, sleep_stages, 
                     "df_events": df_events,
                     "windows_dict_ecg": windows_dict_ecg,
                     "verbose":config.run.verbose,
+                    "psg_id": psg_id
                 }
 
 

@@ -57,15 +57,17 @@ def main():
     # selected_subs = mastersheet["sub_id"].tolist()
     # print(f"{len(selected_subs)} selected subjects: {selected_subs}")
 
-    # path_log = "/wynton/home/leng/alice-albrecht/projects/PSG_Pipeline/log/h5_mgb.o1467402"
+    # path_log = "/wynton/home/leng/alice-albrecht/projects/PSG_Pipeline/log/restart_vb_mgb.o1488362"
     # selected_subjects = []
     # with open(path_log, "r") as f:
-    #     for line in f:
-    #         if "No RESP" in line:
-    #             psg_id = line.split('sub-')[-1]
+    #     lines = f.readlines()
+    #     for line in lines: 
+    #         if "[ERROR] MATLAB" in line:
+    #             psg_id = line.split('.mat')[0].split('sub-')[-1]
     #             sub_id = psg_id.split('_')[0]
     #             session = psg_id.split('ses-')[-1]
     #             selected_subjects.append((sub_id, int(session)))
+    # selected_subjects = list(set(selected_subjects)) # remove duplicates
 
     # selected_subjects = list(set(selected_subjects))
     # selected_subjects = [
@@ -106,7 +108,7 @@ def main():
     # print(len(mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in too_early_start, axis=1)])," PSG with sleep stages starting too_early.")
     # mastersheet = mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in too_late_start, axis=1)]
     # mastersheet = add_metatdata(mastersheet) 
-    # mastersheet = mastersheet[:4]
+    mastersheet = mastersheet[:3]
     rows = mastersheet.to_dict(orient="records")
 
     # --- Step 3: Convert EDF to H5 file --- 
