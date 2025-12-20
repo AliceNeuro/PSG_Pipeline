@@ -3,9 +3,9 @@ import pandas as pd
 import math
 
 # === CONFIG ===
-dataset_name = "shhs_ses-1" 
-run_date = "20251215"
-feature = "vb"
+dataset_name = "mros_ses-1" 
+run_date = "20251218"
+feature = "aasm"
 results_path = f"/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/{dataset_name}/run_{run_date}_{feature}/"
 print(results_path)
 # results_path = "/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/shhs_ses-1/run_20251013"

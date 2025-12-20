@@ -1,0 +1,30 @@
+/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/mros_ses-1/run_20251218_aasm/
+[INFO] Found 5822 files → 24 batches of 250
+[INFO] Processing batch 1/24 (250 files)
+[INFO] Processing batch 2/24 (250 files)
+[INFO] Processing batch 3/24 (250 files)
+[INFO] Processing batch 4/24 (250 files)
+[INFO] Processing batch 5/24 (250 files)
+[INFO] Processing batch 6/24 (250 files)
+[INFO] Processing batch 7/24 (250 files)
+[INFO] Processing batch 8/24 (250 files)
+[INFO] Processing batch 9/24 (250 files)
+[INFO] Processing batch 10/24 (250 files)
+[INFO] Processing batch 11/24 (250 files)
+[INFO] Processing batch 12/24 (250 files)
+[INFO] Processing batch 13/24 (250 files)
+[INFO] Processing batch 14/24 (250 files)
+[INFO] Processing batch 15/24 (250 files)
+[INFO] Processing batch 16/24 (250 files)
+[INFO] Processing batch 17/24 (250 files)
+[INFO] Processing batch 18/24 (250 files)
+[INFO] Processing batch 19/24 (250 files)
+[INFO] Processing batch 20/24 (250 files)
+[INFO] Processing batch 21/24 (250 files)
+[INFO] Processing batch 22/24 (250 files)
+[INFO] Processing batch 23/24 (250 files)
+[INFO] Processing batch 24/24 (72 files)
+[INFO] Final combined CSV saved: /wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/mros_ses-1/run_20251218_aasm/mros_ses-1_aasm_all.csv
+[INFO] Saved /wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/mros_ses-1/run_20251218_aasm/mros_ses-1_aasm_WN.csv with 0 stage columns
+[INFO] Saved /wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/mros_ses-1/run_20251218_aasm/mros_ses-1_aasm_REM.csv with 0 stage columns
+[INFO] Saved /wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/mros_ses-1/run_20251218_aasm/mros_ses-1_aasm_N2N3.csv with 0 stage columns

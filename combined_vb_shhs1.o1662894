@@ -1,4 +1,4 @@
-/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/shhs_ses-1/run_20251215_vb/
+/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/shhs_ses-1/run_20251218_aasm/
 [INFO] Found 11588 files → 47 batches of 250
 [INFO] Processing batch 1/47 (250 files)
 [INFO] Processing batch 2/47 (250 files)
@@ -47,7 +47,7 @@
 [INFO] Processing batch 45/47 (250 files)
 [INFO] Processing batch 46/47 (250 files)
 [INFO] Processing batch 47/47 (88 files)
-[INFO] Final combined CSV saved: /wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/shhs_ses-1/run_20251215_vb/shhs_ses-1_vb_all.csv
-[INFO] Saved /wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/shhs_ses-1/run_20251215_vb/shhs_ses-1_vb_WN.csv with 1 stage columns
-[INFO] Saved /wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/shhs_ses-1/run_20251215_vb/shhs_ses-1_vb_REM.csv with 1 stage columns
-[INFO] Saved /wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/shhs_ses-1/run_20251215_vb/shhs_ses-1_vb_N2N3.csv with 1 stage columns
+[INFO] Final combined CSV saved: /wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/shhs_ses-1/run_20251218_aasm/shhs_ses-1_aasm_all.csv
+[INFO] Saved /wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/shhs_ses-1/run_20251218_aasm/shhs_ses-1_aasm_WN.csv with 0 stage columns
+[INFO] Saved /wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/shhs_ses-1/run_20251218_aasm/shhs_ses-1_aasm_REM.csv with 0 stage columns
+[INFO] Saved /wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/shhs_ses-1/run_20251218_aasm/shhs_ses-1_aasm_N2N3.csv with 0 stage columns

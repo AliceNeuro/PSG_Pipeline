@@ -2,12 +2,11 @@
 #$ -S /bin/bash       # the shell language when run via the job scheduler
 #$ -cwd               # job should run in the current working directory
 #$ -j y               # cleaner log
-#$ -N vb_shhs1
-#$ -o log/vb_shhs1.o$JOB_ID
-#$ -l h_rt=72:00:00
+#$ -N aasm_mgb
+#$ -o log/aasm_mgb.o$JOB_ID
+#$ -l h_rt=48:00:00
 #$ -pe smp 16
-#$ -l mem_free=12G 
-#$ -l h_vmem=24G
+#$ -l mem_free=4G 
 
 # Activate environment
 module load CBI
@@ -17,4 +16,4 @@ conda activate env_sleep_py310
 
 # Run your pipeline
 python /wynton/home/leng/alice-albrecht/projects/PSG_Pipeline/run_pipeline.py \
-    --config /wynton/home/leng/alice-albrecht/projects/PSG_Pipeline/config/shhs_ses-1_config.yaml
+    --config /wynton/home/leng/alice-albrecht/projects/PSG_Pipeline/config/hsp_mgb_config.yaml

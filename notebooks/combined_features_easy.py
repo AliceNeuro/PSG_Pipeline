@@ -2,10 +2,12 @@ import os
 import pandas as pd
 
 # === CONFIG ===
-results_path = "/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/mros_ses-1/run_20251023"
-print(f"[INFO] Using results path: {results_path}")
-
-output_final = os.path.join(results_path, "mros_ses-1_extracted_features_all.csv")
+dataset_name = "hsp_mgb" 
+run_date = "20251218"
+#feature = "aasm"
+results_path = f"/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/{dataset_name}/run_{run_date}/"
+print(results_path)
+output_final = os.path.join(results_path, f"{dataset_name}_all.csv")
 sub_id_col = "sub_id"
 
 # === GET FILE LIST ===
@@ -39,19 +41,3 @@ if sub_id_col in final_df.columns:
 final_df.to_csv(output_final, index=False)
 print(f"[INFO] Final combined CSV saved: {output_final}")
 print(f"[INFO] Number of subjects: {len(final_df)}")
-
-# === SPLIT BY STAGE TYPE ===
-stage_types = ["WN", "REM", "N2N3"]
-
-for stage in stage_types:
-    stage_cols = [col for col in final_df.columns if col.endswith(f"@{stage}")]
-    if not stage_cols:
-        print(f"[WARN] No columns found for stage '{stage}', skipping.")
-        continue
-
-    stage_df = final_df[[sub_id_col] + stage_cols]
-    stage_df = stage_df.sort_values(by=sub_id_col).reset_index(drop=True)
-
-    stage_csv_path = os.path.join(results_path, f"mros_ses-1_extracted_features_{stage}.csv")
-    stage_df.to_csv(stage_csv_path, index=False)
-    print(f"[INFO] Saved {stage_csv_path} with {stage_df.shape[1]-1} stage columns")

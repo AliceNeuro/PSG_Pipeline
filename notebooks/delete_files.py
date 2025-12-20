@@ -11,4 +11,4 @@ path_h5 = "/wynton/group/andrews/data/PSG_Pipeline_Outputs/h5_data/hsp_mgb/"
 for file in os.listdir(path_h5):
     if file not in keep_files:
         print(f"Deleting: {file}")
-        os.remove(os.path.join(path_h5, file)) 
+        #os.remove(os.path.join(path_h5, file)) 

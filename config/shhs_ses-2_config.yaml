@@ -19,7 +19,7 @@ output:
 features:
   extract_all: false 
   selected: # not looked if extract_all = true
-    - vb
+    - aasm
 
 analysis:
   # process_signals
