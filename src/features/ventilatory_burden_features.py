@@ -58,7 +58,7 @@ def extract_vb(row, tmp_dir_sub, resp_data, full_sleep_stages, verbose):
             good_signal = True
         
     
-    if "THERM " in resp_data.keys() and not good_signal: # RESTRAT HERE !!
+    if "THERM " in resp_data.keys() and not good_signal: 
         print(f"[IMPORTANT] {psg_id}: VB compute on THERM channel !")
         full_resp = resp_data["THERM"]['full_signal']
         sfreq_resp = float(resp_data["THERM"]['sfreq_signal'])

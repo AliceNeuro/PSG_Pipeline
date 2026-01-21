@@ -82,16 +82,14 @@ def main():
     # selected_subjects = list(set(selected_subjects)) # remove duplicates
 
     # selected_subjects = list(set(selected_subjects))
-    # selected_subjects = [
-    #         ("S0001121661420", 2),
-    #         ("S0001121662038", 1),
-    #         ("S0001121678526", 1),
-    #         ("S0001122069689", 1),
-    #         ("S0001122108088", 1)
-    #     ]
+    selected_subjects = [
+        ("S0001113555573", 1), 
+        ("S0001121902705", 1),    
+    ]
 
-    # mastersheet = mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in selected_subjects, axis=1)]
-    # print(len(selected_subjects), "selected subjects/sessions:", mastersheet[["sub_id", "session"]].values.tolist())
+
+    mastersheet = mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in selected_subjects, axis=1)]
+    print(len(selected_subjects), "selected subjects/sessions:", mastersheet[["sub_id", "session"]].values.tolist())
     ### End additional code to run only selected subs ### 
 
     # mastersheet = mastersheet[ ~(mastersheet['annot_path'].isna() & mastersheet['sleep_stage_path'].isna())] # remove the PSG that have any event or sleep annotations
@@ -120,7 +118,7 @@ def main():
     # print(len(mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in too_early_start, axis=1)])," PSG with sleep stages starting too_early.")
     # mastersheet = mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in too_late_start, axis=1)]
     # mastersheet = add_metatdata(mastersheet) 
-    # mastersheet = mastersheet[:5]
+    # mastersheet = mastersheet[:2]
     rows = mastersheet.to_dict(orient="records")
 
     # --- Step 3: Convert EDF to H5 file --- 

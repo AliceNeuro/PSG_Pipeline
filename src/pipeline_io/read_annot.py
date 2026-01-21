@@ -380,7 +380,16 @@ def read_annot_MGB(row):
             #     df_events = df_events.loc[resumed_row.name:].reset_index(drop=True)
             #     # Update edf_start_sec to the clock_time of this row
             #     edf_start_sec = datetime_to_sec(resumed_row['clock_time'])
+            if "S0001111410157" in psg_id or "S0001120974563" in psg_id:
+            # Specific case where the light off event is wrongly annotated AM/PM
+                df_events.loc[1, 'clock_time'] = (
+                    pd.to_datetime(df_events.loc[1, 'clock_time'], format='%H:%M:%S')
+                    + pd.Timedelta(hours=12)
+                ).strftime('%H:%M:%S')
 
+            if "S0001121902705" in psg_id:
+                df_events = pd.concat([df_events.tail(1), df_events.head(-1)])
+            
             df_events['clock_time'] = df_events['clock_time'].apply(datetime_to_sec)
 
             # --- START: ENSURING TIME CONTINUITY - MIDNIGHT - LIGHT ---      
@@ -416,9 +425,8 @@ def read_annot_MGB(row):
             # Replace correclty the LIGHT events 
             for idx, row in light_rows.iterrows():
                 ct = row['clock_time']
-                
-                # Add 24h if the light event occurs before noon
-                if ct < 12*3600:
+                # Add 24h if the light event occurs before noon and recording starts after noon (to avoid case starting post midnight)
+                if ct < 12*3600 and annot_start_sec > 12*3600: 
                     ct += 24*3600
                 row['clock_time'] = ct
 

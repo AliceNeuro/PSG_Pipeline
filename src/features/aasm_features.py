@@ -75,7 +75,7 @@ def cut_lights_off_on(full_sleep_stages, df_events, sfreq_global, psg_id):
     off_events = light_events[
         light_events['event_type'].str.contains('out|off', case=False)
     ].copy()
-    off_events = off_events[off_events['onset'].notna()]
+    off_events = off_events[off_events['onset'].notna()] # seconds
 
     if len(off_events) > 1:
         print(f"[WARNING] {psg_id}: Multiple lights-off events detected ({len(off_events)}). Using the first one.")
@@ -87,38 +87,32 @@ def cut_lights_off_on(full_sleep_stages, df_events, sfreq_global, psg_id):
     on_events = on_events[on_events['onset'].notna()]
 
     if len(on_events) > 1:
-        print(f"[WARNING] {psg_id}: Multiple lights-on events detected ({len(on_events)}). Using the first one.")
+        print(f"[WARNING] {psg_id}: Multiple lights-on events detected ({len(on_events)}). Using the last one.")
 
     # --- Determine indices ---
     if len(off_events) > 0 and len(on_events) > 0:
-        off_idx = int(off_events['onset'].min() * sfreq_global)
-        on_idx  = int(on_events['onset'].max() * sfreq_global)
+        # Take from index 0 if lights off is before start
+        first_off_event = off_events['onset'].min() # seconds 
+        if first_off_event > 0:
+            off_idx = int(first_off_event * sfreq_global) # index
+        else:
+            off_idx = 0
+
+        # Take until end if lights on is after end
+        on_idx = int(on_events['onset'].max() * sfreq_global) # index
+        if on_idx > len(full_sleep_stages):
+            on_idx = len(full_sleep_stages)
+        elif on_idx < len(full_sleep_stages)/2: 
+            print(f"[WARNING] {psg_id}: Last lights-on event occurs very early in the recording. Take full signal.")
+            on_idx = len(full_sleep_stages)
+
+        #print("off_idx:", off_idx, "on_idx:", on_idx)
         lights_sleep_stages = full_sleep_stages[off_idx:on_idx]
+        #print("Lengths:", len(full_sleep_stages), len(lights_sleep_stages))
     else:
         # If any of the events is missing, return the full signal
         lights_sleep_stages = full_sleep_stages
-
-    return lights_sleep_stages
-
-
-def cut_lights_off_on(full_sleep_stages, df_events, sfreq_global, psg_id):
-    light_events = df_events[df_events['event_type'].fillna('').astype(str).str.contains('light', case=False)]
-
-    off_events = light_events[light_events['event_type'].str.contains('out|off', case=False, na=False)]
-    on_events  = light_events[light_events['event_type'].str.contains('on', case=False, na=False)]
-
-    if len(off_events) > 1:
-        print(f"[WARNING] {psg_id}: multiple lights-off events ({len(off_events)})")
-    if len(on_events) > 1:
-        print(f"[WARNING] {psg_id}: multiple lights-on events ({len(on_events)})")
-
-    if len(off_events) > 0 and len(on_events) > 0:
-        off_idx = int(off_events['onset'].min() * sfreq_global)
-        on_idx  = int(on_events['onset'].max() * sfreq_global)
-        lights_sleep_stages = full_sleep_stages[off_idx:on_idx]
-    else:
-        lights_sleep_stages = full_sleep_stages
-
+    
     return lights_sleep_stages
 
 # -----------------------------
@@ -198,7 +192,6 @@ def compute_event_indices(full_sleep_stages, sfreq_global, df_events, tst, n1_pc
     else:
         sleep_start_idx = np.argmax(mask)          
         sleep_end_idx   = len(mask) - 1 - np.argmax(mask[::-1])  
-        print(sleep_start_idx, sleep_end_idx)
         start_time = sleep_start_idx / sfreq_global
         end_time   = sleep_end_idx / sfreq_global
 

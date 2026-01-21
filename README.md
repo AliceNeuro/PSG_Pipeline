@@ -13,10 +13,40 @@ Supports computation of sleep-related metrics including:
   - Heart Rate Nadir (HRnadir)
   - Cardiopulmonary Coupling (CPC)
 
-- **Respiratory (TO DO)** 
+- **Sleep architecture & continuity**
+  - Total Sleep Time (TST)
+  - Total Recording Time (TRT)
+  - Sleep Efficiency (SE)
+  - Wake After Sleep Onset (WASO)
+  - Sleep Latency (SL)
+  - REM Latency (RL)
+  - Sleep Fragmentation Index (SFI)
+
+- **Sleep stage composition**
+  - REM Sleep Percentage (REM%)
+  - Stage N1 Sleep Percentage (N1%)
+  - Stage N2 Sleep Percentage (N2%)
+  - Stage N3 Sleep Percentage (N3%)
+
+- **Respiratory**
+  - Apnea–Hypopnea Index (AHI)
+  - Apnea–Hypopnea Index during NREM Sleep (AHI-NREM)
+  - Apnea–Hypopnea Index during REM Sleep (AHI-REM)
+  - Respiratory Disturbance Index (RDI)
+  - Obstructive Apnea Index (OAI)
+  - Central Apnea Index (CAI)
+  - Mixed Apnea Index (MAI)
+  - Hypopnea Index (HyI)
+  - Respiratory Effort–Related Arousal Index (RERAI)
+
+- **Burden-based composite metrics** 
   - Arousal Burden (AB)
   - Ventilatory Burden (VB)
   - Hypoxia Burden (HB)
+
+- **Movement**
+	- Limb Movement Index (LMI)
+	- Periodic Limb Movement Index (PLMI)
 
 - **Neuro / EEG (TO DO)**
   - EEG Microstructure (EEGmicrostructures)
