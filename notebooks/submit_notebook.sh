@@ -2,8 +2,8 @@
 #$ -S /bin/bash       # the shell language when run via the job scheduler
 #$ -cwd               # job should run in the current working directory
 #$ -j y               # cleaner log
-#$ -N combined_vb_shhs1
-#$ -o combined_vb_shhs1.o$JOB_ID
+#$ -N combined_aasm_mgb
+#$ -o combined_aasm_mgb.o$JOB_ID
 #$ -l h_rt=2:00:00
 #$ -l mem_free=30G 
 

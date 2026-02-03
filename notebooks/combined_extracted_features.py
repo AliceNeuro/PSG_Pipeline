@@ -4,7 +4,7 @@ import math
 
 # === CONFIG ===
 dataset_name = "hsp_mgb" 
-run_date = "20251218"
+run_date = "20260128"
 feature = "aasm"
 results_path = f"/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/{dataset_name}/run_{run_date}_{feature}/"
 print(results_path)

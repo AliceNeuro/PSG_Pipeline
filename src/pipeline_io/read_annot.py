@@ -119,7 +119,7 @@ def read_annot_XML(row, dataset_name):
     return full_sleep_stages, df_events
 
 
-def read_annot_BIDMC(row):
+def read_annot_BIDMC_OLD(row):
     sub_id = row["sub_id"]
     session = row["session"]
     psg_id = f"sub-{sub_id}_ses-{session}" 
@@ -155,7 +155,12 @@ def read_annot_BIDMC(row):
             # Compute drops
             times = df_events['onset'].values
             drops = [i for i in range(1, len(times)) if times[i] < times[i - 1]]
-            if len(drops) > 1:
+
+            # Check if first onset is before 5 AM so starting after midnight
+            first_onset = df_events['onset'].dropna().iloc[0]
+            start_am = first_onset < 5 * 3600
+            print("Start after midnight:", start_am, "len(drops):", len(drops))
+            if (not start_am and len(drops)>1) or (start_am and len(drops)>0):
                 for drop_idx in drops:
                     drop_amount = times[drop_idx - 1] - times[drop_idx]
                     if drop_amount < 3600: # less than an hour drop 
@@ -174,7 +179,8 @@ def read_annot_BIDMC(row):
                         # print(f"[INFO] {psg_id}: Move event '{row_to_move['event_type']}' at index {drop_idx} to new index {insert_idx}")
             
             # Only one drop → standard post-midnight adjustment
-            df_events['onset'] = ensure_post_midnight(df_events['onset'])
+            if not start_am:
+                df_events['onset'] = ensure_post_midnight(df_events['onset'])
 
             # Shift event file if not matching recording time
             edf_start_sec = datetime_to_sec(row["start_time"]) 
@@ -343,7 +349,7 @@ def read_annot_BIDMC(row):
 
 
 
-def read_annot_MGB(row):
+def read_annot_BIDMC(row):
     sub_id = row["sub_id"]
     session = row["session"]
     psg_id = f"sub-{sub_id}_ses-{session}" 
@@ -352,9 +358,244 @@ def read_annot_MGB(row):
     sfreq_global = row["sfreq_global"]
     duration_samples = row["duration_samples"]
 
-    # ------------------------
     # -------- EVENT ---------
-    # ------------------------
+    if pd.isna(annot_path): # Creating empty df_events
+        print(f"[WARNING] {psg_id}: No Annot Stage Path found.") # 1 time
+        df_events = pd.DataFrame(columns=["onset", "duration", "event_type"])
+    else: # Read the slepe stage from the specific file 
+        df_annot = pd.read_csv(annot_path)
+        print("Shape initial:", df_annot.shape)
+        required_cols = {"Epoch", "Record Time", "Time", "Length", "Description"}
+        if required_cols.issubset(df_annot.columns):
+            df_events = df_annot[list(required_cols)].copy()
+            df_events = df_events.rename(columns={
+                "Epoch": "epoch",
+                "Record Time": "onset",
+                "Time" : "clock_time",
+                "Length": "duration",
+                "Description": "event_type"
+                })
+            
+            # Convert 'duration' → numeric (replace '-' or missing with 0.0)
+            df_events['duration'] = pd.to_numeric(df_events['duration'], errors='coerce').fillna(0.0)
+
+            # Convert onset & clock_time to seconds
+            df_events['onset'] = df_events['onset'].apply(datetime_to_sec)
+            df_events['clock_time'] = df_events['clock_time'].apply(datetime_to_sec)
+
+            print("Shape after datetime_to_sec:", df_events.shape)
+                                                        
+            # Detect crossing midnight
+            min_clock_time = df_events["clock_time"].min()
+            max_clock_time = df_events["clock_time"].max()
+            crosses_midnight = (
+                min_clock_time < 2 * 3600      # early morning
+                and max_clock_time > 12 * 3600 # evening
+            )
+
+            # Recording crosses midnight → sort before/after midnight separately
+            if crosses_midnight:
+                midnight_idx= df_events["clock_time"].values.argmin()
+                print("midnight_idx", midnight_idx, "min_clock_time", min_clock_time)
+
+                # Adjust the cut if midnight_idx is not correct
+                df_before_midnight_tmp = df_events.iloc[:midnight_idx]
+                print("Shape tmp before:", df_before_midnight_tmp.shape)
+                if len(df_before_midnight_tmp) >= 3:
+                    min_before_val = df_before_midnight_tmp["clock_time"].min()
+                    min_before_idx = df_before_midnight_tmp["clock_time"].values.argmin()
+                    if min_before_idx >= len(df_before_midnight_tmp) - 3 and min_before_val < 2*3600:
+                        print(f"[INFO] {psg_id}: Adjusted midnight index from {midnight_idx} to {min_before_idx}")
+                        midnight_idx = min_before_idx
+                    else:
+                        print(f"[INFO] {psg_id}: midnight is correct")
+
+                # Split, sort, and recombine
+                df_before_midnight = df_events.iloc[:midnight_idx].sort_values('clock_time')
+                df_after_midnight = df_events.iloc[midnight_idx:].sort_values('clock_time')
+
+                # Recording crosses midnight → fix onset times
+                if not df_before_midnight.empty and not df_after_midnight.empty:
+                    df_after_midnight['clock_time'] += 24*3600
+                    df_after_midnight['onset'] += 24*3600       
+                    #df_events["onset"] = ensure_post_midnight(df_events["onset"])
+                    #df_events["clock_time"] = ensure_post_midnight(df_events["clock_time"])
+                
+                df_events = pd.concat([df_before_midnight, df_after_midnight]).reset_index(drop=True)
+                print("Shapes:", df_before_midnight.shape, df_after_midnight.shape, df_events.shape)
+                    
+                df_events.to_csv("/wynton/group/andrews/data/PSG_Pipeline_Outputs/events/df_events_bidmc_test.csv")
+
+            # Shift event file if not matching recording time
+            edf_start_sec = datetime_to_sec(row["start_time"]) 
+            if edf_start_sec < 5*3600 and crosses_midnight:
+                print(f"[WARNING] {psg_id}: EDF start after midnight: {edf_start_sec} seconds.")
+                edf_start_sec += 24*3600
+
+            # Find first index of event and first idx after edf start 
+            first_idx_mask = df_events['clock_time'].notna() & (df_events['clock_time'] != 0) 
+            first_idx = first_idx_mask.idxmax() if first_idx_mask.any() else 0
+
+            # If werid first event onset -> find real start within first 5
+            change_first_epoch = False # init
+            first_correct_epoch = 1 # init
+            first_after_start_idx = df_events.index[df_events['clock_time'] >= edf_start_sec][0] 
+            subset = df_events.iloc[: first_after_start_idx + 5].copy()
+            offset = subset['clock_time'].astype(float) - subset['onset'].astype(float) # diff start recording and events onset
+            subset['time_offset'] = np.where(offset != 0, offset, np.nan)
+            offset_diffs = subset['time_offset'].diff().abs()
+            offset_change_idxs = offset_diffs[offset_diffs.gt(1)].index
+            n_offsets = len(offset_change_idxs)
+
+            if n_offsets >= 1: # weird time at the begging 
+                last_change_idx = offset_change_idxs[-1] # only use the last one
+                print(f"[WARNING] {psg_id}: Detected {n_offsets} time offset jumps. Using the last one at index {last_change_idx}.")
+                correct_start = subset.loc[last_change_idx, 'time_offset']
+                # rows BEFORE the last change need correction
+                to_fix = df_events.iloc[:last_change_idx].copy()
+                to_fix['onset'] = (to_fix['clock_time'] - correct_start)
+                if (to_fix['onset'] > (24*3600)).any():
+                    to_fix['onset'] = to_fix['onset'] - (24*3600)
+
+                # rows AFTER the last change are already correct
+                df_events = pd.concat([to_fix, df_events.iloc[last_change_idx:]]).reset_index(drop=True)
+                first_correct_epoch = subset.loc[last_change_idx, 'epoch']
+                change_first_epoch = True
+                print(f"[INFO] {psg_id}: New first epoch: {first_correct_epoch}")
+
+            annot_start_sec = df_events['clock_time'].iloc[first_idx] - df_events['onset'].iloc[first_idx]
+            if (
+                (edf_start_sec is not None) and not np.isnan(edf_start_sec) and
+                (annot_start_sec is not None) and not np.isnan(annot_start_sec)
+                ):
+                offset_sec = annot_start_sec - edf_start_sec 
+                if abs(offset_sec) <= 1:
+                    df_events["onset"] = df_events["onset"].astype(float) + offset_sec
+                    if int(offset_sec) != 0:
+                        print(f"[OK] {psg_id}: Shift of {offset_sec} s")
+                elif offset_sec < -1:
+                    print(f"[WARNING] {psg_id}: Event start before recording ({offset_sec:.3f}s)")
+                    df_events["onset"] = df_events["onset"].astype(float) + offset_sec
+                else:
+                    print(f"[WARNING] {psg_id}: offset_event >1s ({offset_sec:.3f}s)")
+                    df_events["onset"] = df_events["onset"].astype(float) + offset_sec
+            else:
+                print(f"[ERROR] {psg_id}: edf_start ({edf_start_sec}) or annot_start ({annot_start_sec}) is not defined")
+            
+            if change_first_epoch:
+                first_pos_onset = df_events.loc[df_events["onset"] > 0, "onset"].iloc[0]
+                epoch_shift = int(first_pos_onset // 30)
+                first_correct_epoch -= epoch_shift
+                if epoch_shift != 0:
+                    print(f"[INFO] {psg_id}: Shifted first epoch: {first_correct_epoch}")
+            
+        else:
+            print(f"[WARNING] {psg_id}:  No events extracted - Missing expected columns: {required_cols - set(df_annot.columns)}")
+            df_events = pd.DataFrame(columns=["event_type", "onset", "duration"])
+    
+    # Final type enforcement
+    df_events['onset'] = df_events['onset'].astype(float)
+    df_events['duration'] = df_events['duration'].astype(float)
+    df_events['event_type'] = (
+        df_events['event_type']
+        .astype(str)
+        .str.lower()
+    )
+
+    # Sort and reorder columns
+    df_events = df_events.drop(columns = ['clock_time'])
+    df_events = df_events.sort_values('onset', ignore_index=True, ascending=True)
+    desired_order = ['onset', 'duration', 'event_type']
+    existing_cols = [c for c in desired_order if c in df_events.columns]
+    df_events = df_events[existing_cols]
+    
+    # -------- SLEEP STAGE ----------
+    # Open and read sleep CSV 
+    if pd.isna(sleep_stage_path): # Should never be the case for BIDMC
+        print(f"[ERROR] {psg_id}: No Sleep Stage Path found.")
+        full_sleep_stages = []
+    else:
+        df_sleep = pd.read_csv(sleep_stage_path)
+        start_idx = df_sleep.index[df_sleep["Epoch"] == first_correct_epoch][0]
+        df_sleep = df_sleep.iloc[start_idx:].copy()
+        stage_col = next((c for c in df_sleep.columns if "stage" in c.lower()), None)
+        if stage_col is None:
+            print(f"[ERROR] {psg_id}: No column containing 'stage' found in df_sleep")
+            return None, None 
+        raw_stages = df_sleep[stage_col]
+        stage_dict = {"W": 0, "WAKE": 0, 
+                      "N1": 1, "1": 1,
+                      "N2": 2, "2": 2,
+                      "N3": 3, "N4": 3, "3": 3, "4": 3,
+                      "R": 4, "REM": 4}
+        sleep_stages_mapped = [stage_dict.get(str(s), np.nan) for s in raw_stages]
+
+        ### Adding a check 
+        first_epoch = df_sleep.iloc[0]["Epoch"]
+        if first_epoch != 1:
+            print(f"[WARNING] {psg_id}: First Epoch in df_sleep is: {first_epoch}")
+
+        # Create a df_stages
+        epoch_length_sec = 30
+        n_epochs = int(duration_samples / (epoch_length_sec * sfreq_global))
+        full_sleep_stages = np.array([s for s, g in groupby(sleep_stages_mapped) for _ in range(int(len(list(g)) * epoch_length_sec * sfreq_global))])
+
+        # Warnings and adjustments for length mismatches
+        if len(full_sleep_stages) != duration_samples:
+            if len(full_sleep_stages) > duration_samples:
+                # Adjust full sleep stages AND sleep_stages_mapped
+                excess_samples = len(full_sleep_stages) - duration_samples
+                samples_per_epoch = int(epoch_length_sec * sfreq_global)
+                excess_epochs = int(np.ceil(excess_samples / samples_per_epoch))
+                if excess_epochs > 0:
+                    to_trim = sleep_stages_mapped[-excess_epochs:]
+                    if excess_epochs > 1 and any(not (np.isnan(x) or x == 0) for x in to_trim):
+                        print(f"[WARNING] {psg_id}: Trimming {excess_epochs} extra sleep_stages: {to_trim}")
+                    sleep_stages_mapped = sleep_stages_mapped[:-excess_epochs]
+                full_sleep_stages = full_sleep_stages[:duration_samples]
+            else:
+                # Too short → pad with NaNs if within one epoch
+                missing_len = duration_samples - len(full_sleep_stages)
+                if missing_len >= (epoch_length_sec * sfreq_global):
+                    missing_epochs = int(np.ceil(missing_len / (epoch_length_sec * sfreq_global)))
+                    sleep_stages_mapped = np.concatenate([sleep_stages_mapped, np.full(missing_epochs, np.nan)])
+                    print(f"[ERROR] {psg_id}: Sleep_stages too short "
+                          f"({len(full_sleep_stages)} vs {duration_samples} samples) adding {missing_epochs} NaN stages.")
+
+                # uncomplete epoch has no sleep stage so just np.nan
+                full_sleep_stages = np.concatenate([full_sleep_stages, np.full(missing_len, np.nan)])
+
+        # Create DataFrame for sleep stages
+        if (len(sleep_stages_mapped) - n_epochs) == 1:
+            sleep_stages_mapped = sleep_stages_mapped[:-1] # remove uncomplete 
+        try:
+            df_stages = pd.DataFrame({
+                'onset': np.arange(0, n_epochs * 30, 30),
+                'duration': np.full(n_epochs, 30),
+                'sleep_stage': sleep_stages_mapped
+            })
+        except Exception as e:
+            print(f"[ERROR] PSG {psg_id}: n_epoch and sleep_stage not same length ({e})")
+            df_stages = pd.DataFrame()
+        
+    # -------- CONCAT SLEEP EVENTS ----------
+    df_stages = df_stages.assign(event_type=np.nan)
+    df_events = df_events.assign(sleep_stage=np.nan)
+    df_events = pd.concat([df_stages, df_events], ignore_index=True).sort_values('onset').reset_index(drop=True)
+
+    return full_sleep_stages, df_events
+
+
+def read_annot_MGB(row):
+    sub_id = row["sub_id"]
+    session = row["session"]
+    psg_id = f"sub-{sub_id}_ses-{session}" 
+    annot_path = row["annot_path"]
+    sfreq_global = row["sfreq_global"]
+    duration_samples = row["duration_samples"]
+
+
+    # ---------- EVENT ---------- 
     if pd.isna(annot_path): # Creating empty df_events
         print(f"[WARNING] {psg_id}: No annot path found.") # 1 time
         df_events = pd.DataFrame(columns=["onset", "duration", "event_type"])
@@ -367,30 +608,43 @@ def read_annot_MGB(row):
                 "time" : "clock_time",
                 "event": "event_type"
                 })
-            
             # Convert 'duration' → numeric (replace '-' or missing with 0.0)
             df_events['duration'] = pd.to_numeric(df_events['duration'], errors='coerce').fillna(0.0)
-         
-            # Shift event file if not matching recording time
-            edf_start_sec = datetime_to_sec(row["start_time"]) 
-            # Nope in the end it's not impacting normally 
-            # if "Recording Resumed" in df_events['event_type'].values:
-            #     # Cut the table so this row is the first
-            #     resumed_row = df_events[df_events['event_type'] == "Recording Resumed"].iloc[0]
-            #     df_events = df_events.loc[resumed_row.name:].reset_index(drop=True)
-            #     # Update edf_start_sec to the clock_time of this row
-            #     edf_start_sec = datetime_to_sec(resumed_row['clock_time'])
-            if "S0001111410157" in psg_id or "S0001120974563" in psg_id:
+
+            # ----------------- CAS SPECIFICS ADJUSTMENTS -----------------
+            # Adjust badly stoped annotations - better to do specific cases
+            if (psg_id == "sub-S0001113512628_ses-1") or (psg_id == "sub-S0001119914954_ses-1") or (psg_id == "sub-S0001114155976_ses-1"):
+                df_events = df_events.iloc[:-3]
+            if (psg_id == "sub-S0001118458443_ses-1"):
+                df_events = df_events.iloc[:-5]
+            if (psg_id == "sub-S0001116466792_ses-1"):
+                df_events = df_events.iloc[:-18]
+            if (psg_id == "sub-S0001118303341_ses-1"): # signal also cut
+                last_light_on_idx = df_events[
+                    df_events["event_type"].str.contains("lights on", case=False, na=False)
+                ]
+                last_light_on_idx = last_light_on_idx.index[-1]
+                print(f"[INFO] {psg_id}: Specific case - cropping event at index:", last_light_on_idx)
+                df_events = df_events.iloc[:last_light_on_idx+1]
+
             # Specific case where the light off event is wrongly annotated AM/PM
+            if (psg_id == "sub-S0001111410157_ses-1") or (psg_id =="sub-S0001120974563_ses-1"):
                 df_events.loc[1, 'clock_time'] = (
                     pd.to_datetime(df_events.loc[1, 'clock_time'], format='%H:%M:%S')
                     + pd.Timedelta(hours=12)
                 ).strftime('%H:%M:%S')
+            # -------------------------------------------------------------
 
-            if "S0001121902705" in psg_id:
-                df_events = pd.concat([df_events.tail(1), df_events.head(-1)])
-            
+            # Shift event file if not matching recording time
+            edf_start_sec = datetime_to_sec(row["start_time"]) 
             df_events['clock_time'] = df_events['clock_time'].apply(datetime_to_sec)
+
+            # Specific case where last event is the light out the day before
+            # Have to do it after clock_time conversion to seconds
+            if (psg_id == "sub-S0001121902705_ses-1"):
+                df_events = pd.concat([df_events.tail(1), df_events.head(-1)],
+                    ignore_index=True)
+                df_events.loc[0, 'clock_time'] -= 24 * 3600
 
             # --- START: ENSURING TIME CONTINUITY - MIDNIGHT - LIGHT ---      
             # Find rows with "LIGHT" in 'event_type' 
@@ -425,6 +679,10 @@ def read_annot_MGB(row):
             # Replace correclty the LIGHT events 
             for idx, row in light_rows.iterrows():
                 ct = row['clock_time']
+                # Not replacing the light events without clock time 
+                if ct is None or np.isnan(ct):
+                    print(f"[INFO] {psg_id}: LIGHT event at index {idx} has no clock_time.")
+                    continue
                 # Add 24h if the light event occurs before noon and recording starts after noon (to avoid case starting post midnight)
                 if ct < 12*3600 and annot_start_sec > 12*3600: 
                     ct += 24*3600
@@ -501,9 +759,8 @@ def read_annot_MGB(row):
             df_events = df_events.sort_values('onset', ignore_index=True, ascending=True)
             # --- END: DEVIDE IN DF_EVENTS AND DF_SLEEP ---
 
-            # -------------------------------
-            # -------- SLEEP STAGE ----------
-            # -------------------------------
+           
+            # ---------- SLEEP STAGE ---------- 
             # Check first sleep stage colck time - muliple of 30 or not
             if df_sleep.empty:
                 print(f"[ERROR] {psg_id} No Sleep_Stages in event !!")
@@ -570,7 +827,7 @@ def read_annot_MGB(row):
                     print(f"[INFO] {psg_id}: {n_extra} sleep stages for first_sleep_onset={first_sleep_onset}")
                     if all((pd.isna(x) or x == 0) for x in extra):
                         df_sleep = df_sleep.iloc[n_extra:]
-                        print(f"[INFO] {psg_id}: Removing first Sleep Stages: {extra.to_list()}")    
+                        #print(f"[INFO] {psg_id}: Removing first Sleep Stages: {extra.to_list()}")    
                     else: 
                         print(f"[ERROR] {psg_id}: Cannot remove first Sleep Stages that contain info: {extra.to_list()}")      
                         df_sleep = pd.DataFrame(columns=["onset", "duration", "sleep_stage"])      

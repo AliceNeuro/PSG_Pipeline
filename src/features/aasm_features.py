@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from collections import Counter
 
 def extract_aasm(full_sleep_stages, sleep_stages, df_events, row):
@@ -75,7 +76,7 @@ def cut_lights_off_on(full_sleep_stages, df_events, sfreq_global, psg_id):
     off_events = light_events[
         light_events['event_type'].str.contains('out|off', case=False)
     ].copy()
-    off_events = off_events[off_events['onset'].notna()] # seconds
+    off_events['onset'] = off_events['onset'].bfill() # next not missing onset 
 
     if len(off_events) > 1:
         print(f"[WARNING] {psg_id}: Multiple lights-off events detected ({len(off_events)}). Using the first one.")
@@ -84,33 +85,60 @@ def cut_lights_off_on(full_sleep_stages, df_events, sfreq_global, psg_id):
     on_events = light_events[
         light_events['event_type'].str.contains('on', case=False)
     ].copy()
-    on_events = on_events[on_events['onset'].notna()]
+    on_events['onset'] = on_events['onset'].ffill() # previous 
 
     if len(on_events) > 1:
         print(f"[WARNING] {psg_id}: Multiple lights-on events detected ({len(on_events)}). Using the last one.")
 
     # --- Determine indices ---
     if len(off_events) > 0 and len(on_events) > 0:
+        # ----- LIGHT OFF EVENT -----
+        first_off_event = off_events['onset'].min()  # seconds
         # Take from index 0 if lights off is before start
-        first_off_event = off_events['onset'].min() # seconds 
-        if first_off_event > 0:
-            off_idx = int(first_off_event * sfreq_global) # index
-        else:
-            off_idx = 0
+        off_idx = int(first_off_event * sfreq_global) if first_off_event > 0 else 0
 
-        # Take until end if lights on is after end
-        on_idx = int(on_events['onset'].max() * sfreq_global) # index
+        # Check if there is ANY stage 1–4 before lights off
+        has_real_sleep_before_off = not df_events[
+            (df_events['onset'] < first_off_event) &
+            (df_events['sleep_stage'].isin({1, 2, 3, 4}))
+        ].empty
+
+        if has_real_sleep_before_off:
+            first_sleep = df_events[
+                df_events['sleep_stage'].isin({0, 1, 2, 3, 4})
+            ].iloc[0]
+            off_idx = int(first_sleep['onset'] * sfreq_global)
+            print(f"[INFO] {psg_id}: Adjusted lights-off index to first sleep event at {first_sleep['onset']}s instead of lights-off at {first_off_event}s.")
+
+
+        # ----- LIGHT ON EVENT -----
+        last_on_event = on_events['onset'].max()  # seconds
+        on_idx = int(last_on_event * sfreq_global)
+
+        # Take until end if lights on is after end or very early
         if on_idx > len(full_sleep_stages):
             on_idx = len(full_sleep_stages)
-        elif on_idx < len(full_sleep_stages)/2: 
-            print(f"[WARNING] {psg_id}: Last lights-on event occurs very early in the recording. Take full signal.")
-            on_idx = len(full_sleep_stages)
 
-        #print("off_idx:", off_idx, "on_idx:", on_idx)
+        # Check if there is ANY stage 1–4 after lights on
+        has_real_sleep_after_on = not df_events[
+            (df_events['onset'] > last_on_event) &
+            (df_events['sleep_stage'].isin({1, 2, 3, 4}))
+        ].empty
+
+        if has_real_sleep_after_on:
+            last_sleep = df_events[
+                df_events['sleep_stage'].isin({0, 1, 2, 3, 4})
+            ].iloc[-1]
+
+            duration = last_sleep['duration'] if not pd.isna(last_sleep['duration']) else 0
+            on_idx = int((last_sleep['onset'] + duration) * sfreq_global)
+
+        # ----- CUT SIGNAL -----
         lights_sleep_stages = full_sleep_stages[off_idx:on_idx]
-        #print("Lengths:", len(full_sleep_stages), len(lights_sleep_stages))
+        
     else:
         # If any of the events is missing, return the full signal
+        print(f"[INFO] {psg_id}: Missing lights-off or lights-on event. Using full sleep stages.")
         lights_sleep_stages = full_sleep_stages
     
     return lights_sleep_stages

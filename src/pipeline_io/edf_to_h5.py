@@ -79,6 +79,11 @@ def edf_to_h5_one_subject(config, row):
         print(f"    [ERROR] EDF file not found for subject {psg_id}: {edf_path}", flush=True)
         return 
 
+    # Special case for too long MGB subject
+    if psg_id == "sub-S0001118303341_ses-1":
+        print("cropping MGB subject S0001118303341 to 21734 seconds")
+        raw.crop(tmin=0, tmax=21734)
+
     # --- Step 3c: Get and save metadata ---
     metadata = get_metadata(raw)
     save_metadata_to_h5(metadata, h5_path)

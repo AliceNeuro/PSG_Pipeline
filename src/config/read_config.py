@@ -15,7 +15,7 @@ def read_config():
 
     with open(config_path, 'r') as f:
         config = Box(yaml.safe_load(f))
-    
+
     # --- Check input exists ---
     input_path = Path(config.paths.input)
     if not input_path.exists():

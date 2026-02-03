@@ -43,12 +43,12 @@ def extract_features(config, row, tmp_dir_sub, full_sleep_stages, sleep_stages, 
     }
     psg_id = f"sub-{row['sub_id']}_ses-{row['session']}"
     extracted_features = {}
-    selected = config.features.selected or []
+    features_selected = config.features.selected if config.features.selected is not None else []
     extract_all = config.features.extract_all
     verbose = config.run.verbose
 
     for feature_name, info in FEATURE_REGISTRY.items():
-        if extract_all or feature_name in selected:
+        if extract_all or feature_name in features_selected:
             func = info["func"]
             if verbose: 
                 print(f"[INFO] Extracting feature: {feature_name}")

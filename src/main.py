@@ -83,13 +83,30 @@ def main():
 
     # selected_subjects = list(set(selected_subjects))
     selected_subjects = [
-        ("S0001113555573", 1), 
-        ("S0001121902705", 1),    
+        ("I0002150000076", 1)
+        # ("I0002150031133", 2) 
     ]
 
-
+    selected_subjects = [
+        ('shhs1-200085', 1),
+        ('shhs1-200093', 1),
+        ('shhs1-200096', 1),
+        ('shhs1-200100', 1),
+        ('shhs1-200101', 1),
+        ('shhs1-200104', 1),
+        ('shhs1-200128', 1),
+        ('shhs1-200137', 1),
+        ('shhs1-200150', 1),
+        ('shhs1-200161', 1),
+        ('shhs1-200181', 1),
+        ('shhs1-200184', 1),
+        ('shhs1-200186', 1),
+        ('shhs1-200199', 1),
+        ('shhs1-200200', 1),
+        ('shhs1-200212', 1)
+        ]
     mastersheet = mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in selected_subjects, axis=1)]
-    print(len(selected_subjects), "selected subjects/sessions:", mastersheet[["sub_id", "session"]].values.tolist())
+    # print(len(selected_subjects), "selected subjects/sessions:", mastersheet[["sub_id", "session"]].values.tolist())
     ### End additional code to run only selected subs ### 
 
     # mastersheet = mastersheet[ ~(mastersheet['annot_path'].isna() & mastersheet['sleep_stage_path'].isna())] # remove the PSG that have any event or sleep annotations
@@ -240,7 +257,8 @@ def process_subject(config, row):
 
     # --- Step 4f: Only select windows for features that require them ---
     windows_dict = None
-    if config.features.extract_all or any(f in config.features.selected for f in ["hrv", "cpc"]):
+    features_selected = config.features.selected if config.features.selected is not None else []
+    if config.features.extract_all or any(f in features_selected for f in ["hrv", "cpc"]):
         windows_dict = selecting_windows(
             config,
             row,
