@@ -2,8 +2,8 @@ import os
 import pandas as pd
 
 # === CONFIG ===
-dataset_name = "shhs_ses-1" 
-run_date = "20260202"
+dataset_name = "hsp_mgb" 
+run_date = "20260210"
 #feature = "aasm"
 results_path = f"/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/{dataset_name}/run_{run_date}/"
 print(results_path)

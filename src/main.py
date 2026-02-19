@@ -69,7 +69,7 @@ def main():
     #             selected_subjects.append((sub_id, int(session)))
     # # Remove duplicates
     # selected_subjects = list(set(selected_subjects))
-    # path_log = "/wynton/home/leng/alice-albrecht/projects/PSG_Pipeline/log/restart_vb_mgb.o1488362"
+    # path_log = "/wynton/home/leng/alice-albrecht/projects/PSG_Pipeline/log/vb_shhs1.o3008842"
     # selected_subjects = []
     # with open(path_log, "r") as f:
     #     lines = f.readlines()
@@ -80,31 +80,13 @@ def main():
     #             session = psg_id.split('ses-')[-1]
     #             selected_subjects.append((sub_id, int(session)))
     # selected_subjects = list(set(selected_subjects)) # remove duplicates
-
     # selected_subjects = list(set(selected_subjects))
-    selected_subjects = [
-        ("I0002150000076", 1)
-        # ("I0002150031133", 2) 
-    ]
-
     selected_subjects = [
         ('shhs1-200085', 1),
         ('shhs1-200093', 1),
         ('shhs1-200096', 1),
         ('shhs1-200100', 1),
-        ('shhs1-200101', 1),
-        ('shhs1-200104', 1),
-        ('shhs1-200128', 1),
-        ('shhs1-200137', 1),
-        ('shhs1-200150', 1),
-        ('shhs1-200161', 1),
-        ('shhs1-200181', 1),
-        ('shhs1-200184', 1),
-        ('shhs1-200186', 1),
-        ('shhs1-200199', 1),
-        ('shhs1-200200', 1),
-        ('shhs1-200212', 1)
-        ]
+    ]
     mastersheet = mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in selected_subjects, axis=1)]
     # print(len(selected_subjects), "selected subjects/sessions:", mastersheet[["sub_id", "session"]].values.tolist())
     ### End additional code to run only selected subs ### 
@@ -135,7 +117,7 @@ def main():
     # print(len(mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in too_early_start, axis=1)])," PSG with sleep stages starting too_early.")
     # mastersheet = mastersheet[mastersheet.apply(lambda row: (row["sub_id"], row["session"]) in too_late_start, axis=1)]
     # mastersheet = add_metatdata(mastersheet) 
-    # mastersheet = mastersheet[:2]
+    #mastersheet = mastersheet[:2]
     rows = mastersheet.to_dict(orient="records")
 
     # --- Step 3: Convert EDF to H5 file --- 

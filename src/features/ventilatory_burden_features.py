@@ -1,20 +1,18 @@
-import os 
-from socketserver import ThreadingUnixStreamServer
 import subprocess
 import numpy as np
 import pandas as pd
 from pathlib import Path
 import scipy.io as sio
-import scipy.signal as signal
 import scipy.sparse as sp
+from scipy.signal import butter, filtfilt, savgol_filter, find_peaks, peak_prominences, savgol_filter
 from scipy.optimize import minimize
-from scipy.signal import resample, find_peaks, butter, filtfilt, savgol_filter
 from scipy.stats import mode
 from scipy.fft import fft, fftfreq
 
 def extract_vb(row, tmp_dir_sub, resp_data, sleep_stages, verbose):
+    dataset = row['dataset']
     psg_id = f"sub-{row['sub_id']}_ses-{row['session']}"
-    sfreq_global = float(row['sfreq_global'])
+    fs = float(row['sfreq_global'])
     if not resp_data:
         if verbose:
             print(f"{psg_id}: No respiratory data found → skipping")
@@ -24,237 +22,157 @@ def extract_vb(row, tmp_dir_sub, resp_data, sleep_stages, verbose):
     
     if "NASAL_PRESSURE" in resp_data.keys():
         resp_signal = resp_data["NASAL_PRESSURE"]['signal']
-        sfreq_resp = float(resp_data["NASAL_PRESSURE"]['sfreq_signal'])
-        resp_signal, bool_change_unit = check_resp_units(resp_signal, psg_id)
-        if bool_change_unit:
+        resp_signal, bool_change_unit = check_resp_units(resp_signal, psg_id, verbose)
+        if bool_change_unit and verbose:
             print(f"[INFO] {psg_id} - 'NASAL_PRES': Unit change factor 10^6")
-        
-        # Upsampling if fs < 32Hz
-        min_sfreq = 32.0  
-        if sfreq_resp < min_sfreq:
-            n_samples = int(round(len(resp_signal) * min_sfreq / sfreq_resp))
-            resp_signal = resample(resp_signal , n_samples)
-            sfreq_resp = min_sfreq
 
-        # Apply DORIS de-clipper
-        doris = DORISDeClipper(lambda_smooth=1.0, lambda_energy=0.01)
-        decliped_resp_signal = doris.preprocess_ripflow(
-            resp_signal,
-            auto_detect=True,
-            threshold_percentile=98.0  
-        )
-
-        # Breath-to-breath detrending
-        breath_to_breath_detrender = BreathToBreathDetrend(sampling_rate=sfreq_resp)  
-        detrend_resp_signal = breath_to_breath_detrender.preprocess_baseline_removal(decliped_resp_signal)
+        resp_signal = airflow_preprocess(resp_signal, fs, dataset)
 
         # Sanity Check 
-        if sanity_check(detrend_resp_signal, sfreq_resp, psg_id):
+        if sanity_check(resp_signal, fs, psg_id):
             good_signal = True
 
 
     if ("ABDOMINAL" in resp_data.keys()) and ("THORACIC" in resp_data.keys()) and not good_signal:
         abdo = resp_data["ABDOMINAL"]['signal'] # already cut to sleep only
         thor = resp_data["THORACIC"]['signal'] # already cut to sleep only
-        fs_abd  = float(resp_data["ABDOMINAL"]["sfreq_signal"])
-        fs_thor = float(resp_data["THORACIC"]["sfreq_signal"])
+        #fs_abd  = float(resp_data["ABDOMINAL"]["sfreq_signal"])
+        #fs_thor = float(resp_data["THORACIC"]["sfreq_signal"])
         # Require same fs; if not, stop
-        if not np.isclose(fs_thor, fs_abd):
-            if verbose:
-                print(f"{psg_id}: THORACIC fs ({fs_thor}) != ABDOMINAL fs ({fs_abd}) -> cannot derive RIPFlow")
-            return None
+        # if not np.isclose(fs_thor, fs_abd):
+        #     if verbose:
+        #         print(f"{psg_id}: THORACIC fs ({fs_thor}) != ABDOMINAL fs ({fs_abd}) -> cannot derive RIPFlow")
+        #     return None
         
         # Check unit (MNE)
-        abdo, bool_change_unit = check_resp_units(abdo, psg_id)
-        if bool_change_unit:
+        abdo, bool_change_unit = check_resp_units(abdo, psg_id, verbose)
+        if bool_change_unit and verbose:
             print(f"[INFO] {psg_id} - 'ABDOMINAL': Unit change factor 10^6")
-        thor, bool_change_unit = check_resp_units(thor, psg_id)
-        if bool_change_unit:
+        thor, bool_change_unit = check_resp_units(thor, psg_id, verbose)
+        if bool_change_unit and verbose:
             print(f"[INFO] {psg_id} - 'THORACIC': Unit change factor 10^6")
         
-        sfreq_resp = float(resp_data["THORACIC"]['sfreq_signal'])
+        #sfreq_resp = float(resp_data["THORACIC"]['sfreq_signal'])
         
         # Deducing RIPflow
-        resp_signal, sfreq_resp = derive_ripflow(thor, abdo, sfreq_resp)
-
-        # # Apply DORIS de-clipper
-        # doris = DORISDeClipper(lambda_smooth=1.0, lambda_energy=0.01)
-        # decliped_resp_signal = doris.preprocess_ripflow(
-        #     resp_signal,
-        #     auto_detect=True,
-        #     threshold_percentile=98.0  
-        # )
-
-        # # Breath-to-breath detrending
-        # breath_to_breath_detrender = BreathToBreathDetrend(sampling_rate=sfreq_resp)  
-        # detrend_resp_signal = breath_to_breath_detrender.preprocess_baseline_removal(decliped_resp_signal)
-        
-        # # Sign square results
-        # detrend_resp_signal = np.sign(detrend_resp_signal) * (detrend_resp_signal**2)
+        resp_signal = derive_ripflow(thor, abdo,fs)
+        resp_signal = airflow_preprocess(resp_signal, fs, dataset)
 
         # Sanity Check 
-        results_check = sanity_check(resp_signal, sfreq_resp, psg_id)
+        results_check = sanity_check(resp_signal, fs, psg_id)
         if results_check['passed']:
             good_signal = True
  
     # Check that we have a good airflow signal to compute VB
-    # if not good_signal:
-    #     if verbose: 
-    #         print(f"{psg_id}: Any Resp signal pass signal_check !")
-    #     return None
+    if not good_signal:
+        if verbose: 
+            print(f"{psg_id}: Any Resp signal pass signal_check !")
+        #return None
     
     # Geat df_breath  
     breath_mat = tmp_dir_sub / f"breath_{psg_id}.mat"
-    df_breath = get_breath_array(breath_mat, resp_signal, sfreq_resp, verbose)
+    df_breath = get_breath_array(breath_mat, resp_signal, fs, verbose)
     if df_breath.empty:
         if verbose:
             print(f"[WARNING] {psg_id}: No breaths detected → skipping VB extraction")
         return None
 
-    # Compute VB
-    results = {}
-    if len(df_breath) >= 5:
-        amp = df_breath['normalized_amplitude']
-        amp = np.clip(amp, 0, 200)
-        bins = np.arange(0, 205, 5)
-        hist, _ = np.histogram(amp, bins=bins)
-        hist_percentage = (hist/len(amp)) * 100
-        results['VB'] = np.sum(hist_percentage[:10]) # <= 50% 
-    else:
-        results['VB'] = np.nan
-
-    print(results)
-
-    # # Sleep stages need to match sfreq_resp
-    # print("Length before:", len(sleep_stages))
-    # n_samples = int(round(len(sleep_stages) * sfreq_resp / sfreq_global))
-    # sleep_stages = resample(sleep_stages , n_samples)
-    # print("Length after:", len(sleep_stages))
-    # print(sleep_stages.mean())
-
-    # sleep_stage_per_breath = []
-    # for idx, row in df_breath.iterrows():
-    #     start_idx = int(row['insp_onset'])
-    #     stop_idx = int(row['exp_offset']) + 1
-    #     stages_slice = sleep_stages[start_idx:stop_idx]
-    #     valid_stages = stages_slice[~np.isnan(stages_slice)]
-        
-    #     if len(valid_stages) == 0:
-    #         #if verbose:
-    #             #print(f"[WARNING] {psg_id}: No valid stages for breath idx:", idx, "Start:", start_idx, "Stop:", stop_idx)
-    #         sleep_stage_per_breath.append(np.nan)
-    #     else: # find the most frequent stage
-    #         most_common_stage = mode(valid_stages, keepdims=True).mode[0]
-    #         sleep_stage_per_breath.append(most_common_stage)
-            
-    # df_breath['sleep_stage'] = sleep_stage_per_breath
-
-    # # Results per sleep stages
+    # # Compute VB
     # results = {}
-    # sleep_periods = ['WN', 'SLEEP', 'NREM', 'N2N3', 'REM']
+    # if len(df_breath) >= 5:
+    #     amp = df_breath['normalized_amplitude']
+    #     amp = np.clip(amp, 0, 200)
+    #     bins = np.arange(0, 205, 5)
+    #     hist, _ = np.histogram(amp, bins=bins)
+    #     hist_percentage = (hist/len(amp)) * 100
+    #     results['VB'] = np.sum(hist_percentage[:10]) # <= 50% 
+    # else:
+    #     results['VB'] = np.nan
 
-    # for period in sleep_periods:
-    #     if period == 'WN':
-    #         df_period = df_breath  # all breaths
-    #     elif period == 'SLEEP':
-    #         df_period = df_breath[df_breath['sleep_stage'].isin([1,2,3,4])]
-    #     elif period == 'NREM':
-    #         df_period = df_breath[df_breath['sleep_stage'].isin([1,2,3])]
-    #     elif period == 'N2N3':
-    #         df_period = df_breath[df_breath['sleep_stage'].isin([1,2])]
-    #     elif period == 'REM':
-    #         df_period = df_breath[df_breath['sleep_stage'].isin([4])]
+    # Sleep stages need to match sfreq_resp
+    sleep_stage_per_breath = []
+    for idx, row in df_breath.iterrows():
+        start_idx = int(row['insp_onset'])
+        stop_idx = int(row['exp_offset']) + 1
+        stages_slice = sleep_stages[start_idx:stop_idx]
+        valid_stages = stages_slice[~np.isnan(stages_slice)]
+        
+        if len(valid_stages) == 0:
+            sleep_stage_per_breath.append(np.nan)
+        else: # find the most frequent stage
+            most_common_stage = mode(valid_stages, keepdims=True).mode[0]
+            sleep_stage_per_breath.append(most_common_stage)
+            
+    df_breath['sleep_stage'] = sleep_stage_per_breath
 
-    #     # Only compute if enough breaths
-    #     if len(df_period) >= 5:
-    #         amp = df_period['normalized_amplitude']
-    #         amp = np.clip(amp, 0, 200)
-    #         bins = np.arange(0, 205, 5)
-    #         hist, _ = np.histogram(amp, bins=bins)
-    #         hist_percentage = (hist/len(amp)) * 100
-    #         results[f'vb@{period}'] = np.sum(hist_percentage[:10]) # <= 50% 
-    #     else:
-    #         results[f'vb@{period}'] = np.nan
+    # Results per sleep stages
+    results = {}
+    sleep_periods = ['WN', 'SLEEP', 'NREM', 'N2N3', 'REM']
 
+    for period in sleep_periods:
+        if period == 'WN':
+            df_period = df_breath  # all breaths
+        elif period == 'SLEEP':
+            df_period = df_breath[df_breath['sleep_stage'].isin([1,2,3,4])]
+        elif period == 'NREM':
+            df_period = df_breath[df_breath['sleep_stage'].isin([1,2,3])]
+        elif period == 'N2N3':
+            df_period = df_breath[df_breath['sleep_stage'].isin([1,2])]
+        elif period == 'REM':
+            df_period = df_breath[df_breath['sleep_stage'].isin([4])]
+
+        # Only compute if enough breaths
+        if len(df_period) >= 5:
+            amp = df_period['normalized_amplitude']
+            amp = np.clip(amp, 0, 200)
+            bins = np.arange(0, 205, 5)
+            hist, _ = np.histogram(amp, bins=bins)
+            hist_percentage = (hist/len(amp)) * 100
+            results[f'vb@{period}'] = np.sum(hist_percentage[:10]) # <= 50% 
+        else:
+            results[f'vb@{period}'] = np.nan
+
+    print(f"{psg_id} VB = {results['vb@WN']}")
     return results
 
 
-def derive_ripflow(thor, abdo, sfreq_resp):
-    # Input validation
-    if len(thor) != len(abdo):
-        raise ValueError("Thoracic and abdominal signals must have same length")
-    
-    # Compute volume signal and rescale to global sfreq
-    volume = np.asarray(abdo, float) + np.asarray(thor, float)
+# Bandpass filter Ankit values [0.01 - 2]
+def bandpass_filter(signal, fs, lowcut=0.01, highcut=2, order=3):
+    nyquist = fs / 2
+    low = lowcut / nyquist
+    high = highcut / nyquist
+    b, a = butter(order, [low, high], btype='band')
+    filtered_signal = filtfilt(b, a, signal)
+    return filtered_signal
 
-    # Upsampling if fs < 32Hz
-    min_sfreq = 32.0  
-    if sfreq_resp < min_sfreq:
-        n_samples = int(round(len(volume) * min_sfreq / sfreq_resp))
-        volume = resample(volume , n_samples)
-        sfreq_resp = min_sfreq
 
-    # Enhanced NaN handling with validation
-    def _interp_nans(x):
-        x = x.copy()
-        nan_count = np.sum(~np.isfinite(x))
-        if nan_count > 0:
-            print(f"Warning: Interpolating {nan_count} NaN values ({nan_count/len(x)*100:.1f}%)")
-        
-        idx = np.arange(len(x))
-        m = np.isfinite(x)
-        if np.sum(m) == 0:
-            print("Error: All values are NaN!")
-            return np.zeros_like(x)
-        if np.sum(m) < 10:
-            print(f"Warning: Only {np.sum(m)} valid points for interpolation")
-            
-        x[~m] = np.interp(idx[~m], idx[m], x[m])
-        return x
-    
-    volume = _interp_nans(volume)
+def derive_ripflow(thor, abdo, fs):
+    # Z score use median for robustness
+    z_abdo = (abdo - np.nanmean(abdo)) / np.nanstd(abdo)
+    z_thor = (thor - np.nanmean(thor)) / np.nanstd(thor)
 
-    def lowpass_filter(signal, cutoff, fs, order=3):
-        nyq = 0.5 * fs
-        if cutoff >= nyq:
-            print(f"Warning: Cutoff {cutoff} Hz >= Nyquist {nyq} Hz. Using {nyq*0.8} Hz")
-            cutoff = nyq * 0.8
-            
-        normal_cutoff = cutoff / nyq
-        b, a = butter(order, normal_cutoff, btype='low', analog=False)
-        return filtfilt(b, a, signal)
-    
-    volume_filtered = lowpass_filter(volume, cutoff=0.1, fs=sfreq_resp)
+    # Bandpass filter Ankit values [0.01 - 2]
+    filtered_abdo = bandpass_filter(z_abdo, fs)
+    filtered_thor = bandpass_filter(z_thor, fs)
 
-    # Derive flow using Savitzky-Golay
-    dt = 1.0 / sfreq_resp
-    ripflow = savgol_filter(volume_filtered, window_length=11, 
-                           polyorder=3, deriv=1, delta=dt)
-    
-    # Check if need to flip the signal
-    #is_inverted = correct_polarity(ripflow, sfreq_resp)
-    #if is_inverted:
-    #    print("Signal is inverted")
-    ripflow = -ripflow
+    # Sum signal and amplify (Ankit values)
+    volume = filtered_abdo + filtered_thor
+    volume = 10 * volume
 
-    # Clip signal before squared
-    threshold_percentile = 98
-    threshold = np.percentile(np.abs(ripflow), threshold_percentile)
-    ripflow = np.clip(ripflow, -threshold, threshold)
+    # Derive RIPflow using savgol_filter 
+    ripflow = savgol_filter(volume, 
+                            window_length = 201, 
+                            polyorder = 3, 
+                            deriv=1, 
+                            delta=1.0 / fs)
 
-    # Signe squared transform
+    # Square Signed RIPflow
     ripflow_sq = np.sign(ripflow) * (ripflow**2)
-
-    # Normalize
-    mean_val = np.nanmean(ripflow_sq)
-    std_val = np.nanstd(ripflow_sq)
-    std_val = max(std_val, 1e-8)
-    ripflow_sq = (ripflow_sq - mean_val) / std_val
-
-    return ripflow_sq, sfreq_resp
+    airflow = ripflow_sq
+    return airflow
 
 
-def check_resp_units(full_resp, psg_id, threshold_low=0.01, threshold_high=10.0):
+def check_resp_units(full_resp, psg_id, verbose, threshold_low=0.01, threshold_high=10.0):
     """
     Check if respiratory signal is in expected units.
     If the amplitude is too small (likely in volts), suggest scaling by 1e6.
@@ -279,48 +197,56 @@ def check_resp_units(full_resp, psg_id, threshold_low=0.01, threshold_high=10.0)
     """
     ptp = np.ptp(full_resp)
     if ptp < threshold_low:
-        print(f"[INFO] {psg_id}: signal amplitude very low (ptp={ptp:.5f}), scaling by 1e6")
+        if verbose: 
+            print(f"[INFO] {psg_id}: signal amplitude very low (ptp={ptp:.5f}), scaling by 1e6")
         return full_resp * 1e6, True
     elif ptp > threshold_high:
-        print(f"[INFO] {psg_id}: signal amplitude very high (ptp={ptp:.2f}), check units")
+        if verbose:
+            print(f"[INFO] {psg_id}: signal amplitude very high (ptp={ptp:.2f}), check units")
         return full_resp, False
     else:
         # likely correct units
         return full_resp, False
 
-def correct_polarity(signal_data, sfreq_resp):
+
+
+# Reverse signal if necessary (inspiration upward)    
+def correct_polarity(signal, fs, dataset, min_breath_duration=1.0):
     """
     Ensure inspiration is upward (positive direction)
     """
-    min_breath_duration = 1.0  # seconds
-    max_breath_duration = 15.0  # seconds
+    # SHHS always true
+    if "shhs" in dataset:
+        is_inverted = True
+        return is_inverted
     
-    signal_data = np.array(signal_data)
-    
+    is_inverted = False
+    signal = np.array(signal)
+
     # Remove DC component for analysis
-    detrended = signal_data - np.mean(signal_data)
+    detrended = signal - np.mean(signal)
     
     # Find peaks (potential inspirations) and troughs (potential expirations)
-    peaks, _ = signal.find_peaks(detrended, height=np.std(detrended)*0.5, 
-                                distance=int(sfreq_resp * min_breath_duration))
-    troughs, _ = signal.find_peaks(-detrended, height=np.std(detrended)*0.5, 
-                                    distance=int(sfreq_resp * min_breath_duration))
+    peaks, _ = find_peaks(detrended, height=np.std(detrended)*0.5, 
+                            distance=int(fs * min_breath_duration))
+    troughs, _ = find_peaks(-detrended, height=np.std(detrended)*0.5, 
+                            distance=int(fs * min_breath_duration))
     
     # Calculate breath characteristics for both orientations
     if len(peaks) > 0 and len(troughs) > 0:
         # Current orientation: peaks as inspiration
-        peak_prominences = signal.peak_prominences(detrended, peaks)[0]
-        trough_prominences = signal.peak_prominences(-detrended, troughs)[0]
+        peak_prominences_ = peak_prominences(detrended, peaks)[0]
+        trough_prominences_ = peak_prominences(-detrended, troughs)[0]
         
         # Measure breath regularity (coefficient of variation)
         if len(peaks) > 1:
-            peak_intervals = np.diff(peaks) / sfreq_resp
+            peak_intervals = np.diff(peaks) / fs
             peak_cv = np.std(peak_intervals) / np.mean(peak_intervals)
         else:
             peak_cv = float('inf')
             
         if len(troughs) > 1:
-            trough_intervals = np.diff(troughs) / sfreq_resp
+            trough_intervals = np.diff(troughs) / fs
             trough_cv = np.std(trough_intervals) / np.mean(trough_intervals)
         else:
             trough_cv = float('inf')
@@ -330,8 +256,8 @@ def correct_polarity(signal_data, sfreq_resp):
         # 2. More regular intervals (lower CV)
         # 3. More physiological breathing rate (8-30 breaths/min)
         
-        avg_peak_prominence = np.mean(peak_prominences)
-        avg_trough_prominence = np.mean(trough_prominences)
+        avg_peak_prominence = np.mean(peak_prominences_)
+        avg_trough_prominence = np.mean(trough_prominences_)
         
         # Calculate breathing rates
         if len(peaks) > 1:
@@ -367,17 +293,13 @@ def correct_polarity(signal_data, sfreq_resp):
             trough_score += 1
         
         # Decision
-        if trough_score > peak_score: # Troughs are better inspirations
+        if trough_score > peak_score:
             is_inverted = True
-        else: # Peaks are inspirations, keep as is
-            is_inverted = False
-    else: # Fallback: assume signal is correct
-        is_inverted = False
     
     return is_inverted
 
 
-def sanity_check(full_resp, sfreq_resp, psg_id, ptp_threshold=0.01, noise_threshold=0.5):
+def sanity_check(full_resp, sfreq_resp, psg_id, ptp_threshold=0.01, noise_threshold=0.7):
     """
     Minimal sanity check for a respiratory signal.
     
@@ -492,66 +414,6 @@ def sanity_check(full_resp, sfreq_resp, psg_id, ptp_threshold=0.01, noise_thresh
     return results
 
 
-def sanity_check_old(full_resp, sfreq_resp, psg_id, ptp_threshold=0.01, noise_threshold=0.5):
-    """
-    Minimal sanity check for a respiratory signal.
-
-    Checks:
-        1. Signal is not too noisy (FFT-based)
-        2. Peak-to-peak amplitude is reasonable (empirical threshold or z-score)
-    """
-    full_resp = full_resp.flatten()
-    
-    # Basic validity checks
-    if full_resp is None or len(full_resp) < 100:
-        print(f"[WARNING] {psg_id}: resp signal too short -> skipping")
-        return False
-    
-    if np.isnan(full_resp).all():
-        print(f"[WARNING] {psg_id}: resp signal all NaN -> skipping")
-        return False
-    
-    if np.any(np.isnan(full_resp)):
-        print(f"[WARNING] {psg_id}: resp signal contains NaN -> linear interpolation")
-        nans = np.isnan(full_resp)
-        if nans.all():
-            return False
-        full_resp[nans] = np.interp(np.flatnonzero(nans), np.flatnonzero(~nans), full_resp[~nans])
-
-    if sfreq_resp <= 0 or np.isnan(sfreq_resp):
-        print(f"[WARNING] {psg_id}: invalid fs -> skipping")
-        return False
-
-    # 1. FFT-based noise check
-    N = len(full_resp)
-    yf = fft(full_resp)
-    xf = fftfreq(N, 1 / sfreq_resp)
-
-    # Compute signal-to-noise ratio: ratio of power in 0.1-0.5 Hz (breathing) vs >0.5 Hz (noise)
-    breathing_band = (xf > 0.1) & (xf < 0.5)
-    noise_band = xf > 0.5
-    signal_power = np.sum(np.abs(yf[breathing_band])**2)
-    noise_power = np.sum(np.abs(yf[noise_band])**2)
-    
-    if noise_power == 0:
-        snr = np.inf
-    else:
-        snr = signal_power / noise_power
-
-    if snr < noise_threshold:
-        print(f"[WARNING] {psg_id}: resp signal too noisy (SNR={snr:.2f}) -> skipping")
-        return False
-
-    # 2. Peak-to-peak amplitude check
-    ptp = np.ptp(full_resp)
-    if ptp < ptp_threshold:
-        print(f"[WARNING] {psg_id}: signal too flat (ptp={ptp:.5f}) -> skipping")
-        return False
-
-    # Passed all sanity checks
-    return True
-
-
 def get_breath_array(breath_mat, full_resp, sfreq_resp, verbose):
     sio.savemat(breath_mat, {'nas_pres': full_resp, 
                             'fs': sfreq_resp, 
@@ -574,10 +436,8 @@ def get_breath_array(breath_mat, full_resp, sfreq_resp, verbose):
         subprocess.run(
                     command,
                     check=True,
-                    stdout=None,
-                    stderr=None
-                    # stdout=None if verbose else subprocess.DEVNULL,
-                    # stderr=None if verbose else subprocess.DEVNULL
+                    stdout=None if verbose else subprocess.DEVNULL,
+                    stderr=None if verbose else subprocess.DEVNULL
                 )
     except subprocess.CalledProcessError as e:
         print(f"[ERROR] MATLAB breath detection failed for file: {breath_mat}: {e}")
@@ -596,30 +456,46 @@ def get_breath_array(breath_mat, full_resp, sfreq_resp, verbose):
 
     return df_breath
 
-
-
 class DORISDeClipper:
     def __init__(self, lambda_smooth=1.0, lambda_energy=0.1):
         """
         DORIS: De-clipping using Optimization with Regularized Interpolation and Smoothness
-        
-        Parameters:
-        -----------
-        lambda_smooth : float
-            Regularization parameter for smoothness constraint
-        lambda_energy : float
-            Regularization parameter for finite energy constraint
+        lambda_smooth : Regularization parameter for smoothness constraint
+        lambda_energy : Regularization parameter for finite energy constraint
         """
         self.lambda_smooth = lambda_smooth
         self.lambda_energy = lambda_energy
-    
-    def detect_clipping(self, signal, threshold_percentile=99.5):
-        """
-        Detect clipped regions in the signal
-        """
-        threshold = np.percentile(np.abs(signal), threshold_percentile)
-        clipped_mask = np.abs(signal) >= threshold
-        return clipped_mask, threshold
+
+    # Determine if signal clipped (if not then no declipped apply)
+    def detect_clipping(
+        self,
+        signal,
+        threshold_percentile=99,
+        slope_percentile=10,
+        min_run_length=5
+    ):
+        abs_sig = np.abs(signal)
+
+        amp_thresh = np.percentile(abs_sig, threshold_percentile)
+        slope = np.abs(np.diff(signal, prepend=signal[0]))
+        slope_thresh = np.percentile(slope, slope_percentile)
+
+        # candidate clipped points
+        clipped_mask = (abs_sig >= amp_thresh) & (slope <= slope_thresh)
+
+        # remove isolated points → keep only flat runs
+        clipped_mask_clean = np.zeros_like(clipped_mask, dtype=bool)
+
+        idx = np.where(clipped_mask)[0]
+        if len(idx) == 0:
+            return clipped_mask_clean, amp_thresh
+
+        runs = np.split(idx, np.where(np.diff(idx) != 1)[0] + 1)
+        for r in runs:
+            if len(r) >= min_run_length:
+                clipped_mask_clean[r] = True
+
+        return clipped_mask_clean, amp_thresh
     
     def create_smoothness_matrix(self, n):
         """
@@ -816,7 +692,7 @@ class DORISDeClipper:
         
         return result.x, clipped_mask
 
-    def preprocess_ripflow(self, ripflow_signal, auto_detect=True, threshold_percentile=99.5):
+    def preprocess_airflow(self, airflow, threshold_percentile=99):
         """
         Main preprocessing function for RIPflow signals
         
@@ -836,374 +712,140 @@ class DORISDeClipper:
         clipped_regions : boolean array
             Mask showing which regions were clipped
         """
-        signal = np.array(ripflow_signal)
+        signal = np.array(airflow)
+        clipped_mask, threshold = self.detect_clipping(signal, threshold_percentile)
         
-        if auto_detect:
-            clipped_mask, threshold = self.detect_clipping(signal, threshold_percentile)
+        if np.any(clipped_mask):
+            #print(f"Clipping detected at threshold {threshold:.3f}")
+            #print(f"Number of clipped samples: {np.sum(clipped_mask)} ({100*np.sum(clipped_mask)/len(signal):.1f}%)")
             
-            if np.any(clipped_mask):
-                # Apply DORIS de-clipping
-                processed_signal, clipped_mask = self.declip_signal(signal, clipped_mask)
-                return processed_signal
-            else:
-                return signal
+            # Apply DORIS de-clipping
+            processed_signal, clipped_mask = self.declip_signal(signal, clipped_mask)
+            return processed_signal, clipped_mask
         else:
-            return signal
-        
+            #print("No clipping detected. Using raw signal.")
+            return signal, np.zeros_like(signal, dtype=bool)
 
-class BreathToBreathDetrend:
-    def __init__(self, sampling_rate=100):
+
+class BreathDetrender:
+    def __init__(self, signal, fs=None):
         """
-        RIPflow preprocessing including polarity correction and baseline removal
-        
-        Parameters:
-        -----------
-        sampling_rate : float
-            Sampling rate in Hz
+        signal : 1D numpy array
+        fs     : sampling frequency (optional, only for plotting in seconds)
         """
-        self.fs = sampling_rate
-        self.min_breath_duration = 1.0  # seconds
-        self.max_breath_duration = 15.0  # seconds
-        self.zero_flow_threshold = 120.0  # seconds
-        self.moving_avg_breaths = 5
-    
-    def correct_polarity(self, signal_data):
-        """
-        Ensure inspiration is upward (positive direction)
-        """
-        signal_data = np.array(signal_data)
-        
-        # Remove DC component for analysis
-        detrended = signal_data - np.mean(signal_data)
-        
-        # Find peaks (potential inspirations) and troughs (potential expirations)
-        peaks, _ = signal.find_peaks(detrended, height=np.std(detrended)*0.5, 
-                                   distance=int(self.fs * self.min_breath_duration))
-        troughs, _ = signal.find_peaks(-detrended, height=np.std(detrended)*0.5, 
-                                     distance=int(self.fs * self.min_breath_duration))
-        
-        # Calculate breath characteristics for both orientations
-        if len(peaks) > 0 and len(troughs) > 0:
-            # Current orientation: peaks as inspiration
-            peak_prominences = signal.peak_prominences(detrended, peaks)[0]
-            trough_prominences = signal.peak_prominences(-detrended, troughs)[0]
-            
-            # Measure breath regularity (coefficient of variation)
-            if len(peaks) > 1:
-                peak_intervals = np.diff(peaks) / self.fs
-                peak_cv = np.std(peak_intervals) / np.mean(peak_intervals)
-            else:
-                peak_cv = float('inf')
-                
-            if len(troughs) > 1:
-                trough_intervals = np.diff(troughs) / self.fs
-                trough_cv = np.std(trough_intervals) / np.mean(trough_intervals)
-            else:
-                trough_cv = float('inf')
-            
-            # Decision criteria:
-            # 1. Higher average prominence
-            # 2. More regular intervals (lower CV)
-            # 3. More physiological breathing rate (8-30 breaths/min)
-            
-            avg_peak_prominence = np.mean(peak_prominences)
-            avg_trough_prominence = np.mean(trough_prominences)
-            
-            # Calculate breathing rates
-            if len(peaks) > 1:
-                peak_rate = 60 / np.mean(peak_intervals)
-            else:
-                peak_rate = 0
-                
-            if len(troughs) > 1:
-                trough_rate = 60 / np.mean(trough_intervals)
-            else:
-                trough_rate = 0
-            
-            # Score each orientation
-            peak_score = 0
-            trough_score = 0
-            
-            # Prominence scoring
-            if avg_peak_prominence > avg_trough_prominence:
-                peak_score += 1
-            else:
-                trough_score += 1
-            
-            # Regularity scoring
-            if peak_cv < trough_cv:
-                peak_score += 1
-            else:
-                trough_score += 1
-            
-            # Physiological rate scoring (8-30 breaths/min)
-            if 8 <= peak_rate <= 30:
-                peak_score += 1
-            if 8 <= trough_rate <= 30:
-                trough_score += 1
-            
-            # Decision
-            if trough_score > peak_score: # Troughs are better inspirations
-                is_inverted = True
-            else: # Peaks are inspirations, keep as is
-                is_inverted = False
-        else: # Fallback: assume signal is correct
-            is_inverted = False
-        
-        return is_inverted
-    
-    def detect_breath_changepoints(self, signal_data):
-        """
-        Detect breath changepoints (zero crossings and inspiration starts)
-        
-        Parameters:
-        -----------
-        signal_data : array
-            Preprocessed signal with correct polarity
-            
-        Returns:
-        --------
-        inspiration_starts : array
-            Indices of inspiration start points
-        zero_crossings : array
-            All zero crossing points
-        """
-        # Remove trend for better zero crossing detection
-        detrended = signal.detrend(signal_data, type='linear')
-        
+        self.signal = np.asarray(signal)
+        self.fs = fs
+
+        # Outputs (filled progressively)
+        self.breath_segments = None
+        self.breath_baselines = None
+        self.detrended_signal = None
+
+
+    # -----------------------------------------------------
+    # 1. Split signal into breaths
+    # -----------------------------------------------------
+    def detect_inspiration_starts(self):
+        threshold = 70
+        max_breath_rate = 30
+
+        # Need to reverse to find down peak
+        invert_signal = -self.signal
+
+        # Calculate signal statistics for thresholding
+        min_distance_samples = int(self.fs * 60 / max_breath_rate)
+        height_thresh = np.percentile(invert_signal, threshold)
+        prominence_thresh = np.percentile(np.abs(np.diff(invert_signal)), threshold)
+        valleys, _ = find_peaks(
+            invert_signal, # finding the down peaks
+            distance=min_distance_samples,   # Minimum distance between peaks
+            height=height_thresh,            # Minimum peak height
+            prominence=prominence_thresh,    # Minimum peak prominence
+        )
+
         # Find zero crossings
-        zero_crossings = np.where(np.diff(np.signbit(detrended)))[0]
+        zero_crossings = np.where((self.signal[:-1] <= 0) & (self.signal[1:] > 0))[0] + 1
         
-        if len(zero_crossings) == 0:
-            return np.array([]), np.array([])
-        
-        # Classify crossings as inspiration starts or expiration starts
+        # Find first zero crossing after each valley
         inspiration_starts = []
-        
-        for i, crossing in enumerate(zero_crossings):
-            # Look at the direction of crossing
-            if crossing < len(detrended) - 1:
-                # Check if signal goes from neg to pos (inspiration start)
-                before = detrended[crossing]
-                after = detrended[crossing + 1]
-                
-                if before <= 0 and after > 0:
-                    inspiration_starts.append(crossing)
-        
+        for valley_idx in valleys:
+            future_crossings = zero_crossings[zero_crossings > valley_idx]
+            if len(future_crossings) > 0:
+                inspiration_starts.append(future_crossings[0]) # take first zero
         inspiration_starts = np.array(inspiration_starts)
-        
-        # Filter based on breath duration constraints
-        if len(inspiration_starts) > 1:
-            breath_durations = np.diff(inspiration_starts) / self.fs
-            valid_breaths = np.where(
-                (breath_durations >= self.min_breath_duration) & 
-                (breath_durations <= self.max_breath_duration)
-            )[0]
-            
-            # Keep inspiration starts that lead to valid breaths
-            if len(valid_breaths) > 0:
-                inspiration_starts = inspiration_starts[np.concatenate([[0], valid_breaths + 1])]
-        
-        return inspiration_starts
-    
-    def refine_inspiration_timing(self, signal_data, initial_inspirations):
-        """
-        Refine inspiration start timing based on inspiration time characteristics
-        
-        Parameters:
-        -----------
-        signal_data : array
-            Signal data
-        initial_inspirations : array
-            Initial inspiration start indices
-            
-        Returns:
-        --------
-        refined_inspirations : array
-            Refined inspiration start indices
-        """
-        if len(initial_inspirations) < 2:
-            return initial_inspirations
-        
-        refined_inspirations = []
-        
-        for i in range(len(initial_inspirations)):
-            start_idx = initial_inspirations[i]
-            
-            # Define search window around the initial detection
-            search_window = int(0.2 * self.fs)  # ±200ms
-            start_search = max(0, start_idx - search_window)
-            end_search = min(len(signal_data), start_idx + search_window)
-            
-            # Find the actual minimum in the search window (true inspiration start)
-            search_segment = signal_data[start_search:end_search]
-            local_min_idx = np.argmin(search_segment)
-            refined_start = start_search + local_min_idx
-            
-            refined_inspirations.append(refined_start)
-        
-        return np.array(refined_inspirations)
-    
-    def segment_breaths(self, signal_data, inspiration_starts):
-        """
-        Segment individual breaths from inspiration start to inspiration start
-        
-        Parameters:
-        -----------
-        signal_data : array
-            Signal data
-        inspiration_starts : array
-            Inspiration start indices
-            
-        Returns:
-        --------
-        breath_segments : list
-            List of dictionaries containing breath information
-        """
-        breath_segments = []
-        
-        for i in range(len(inspiration_starts) - 1):
-            start_idx = inspiration_starts[i]
-            end_idx = inspiration_starts[i + 1]
-            
-            breath_data = signal_data[start_idx:end_idx]
-            breath_duration = (end_idx - start_idx) / self.fs
-            
-            # Calculate breath characteristics
-            breath_max = np.max(breath_data)
-            breath_min = np.min(breath_data)
-            breath_amplitude = breath_max - breath_min
-            
-            breath_info = {
-                'start_idx': start_idx,
-                'end_idx': end_idx,
-                'duration': breath_duration,
-                'data': breath_data,
-                'amplitude': breath_amplitude,
-                'max_value': breath_max,
-                'min_value': breath_min,
-                'baseline_start': breath_data[0],
-                'baseline_end': breath_data[-1]
-            }
-            
-            breath_segments.append(breath_info)
-        
-        return breath_segments
-    
-    def calculate_moving_baseline(self, breath_segments):
-        """
-        Calculate moving average baseline using 5 prior breaths
-        
-        Parameters:
-        -----------
-        breath_segments : list
-            List of breath segment dictionaries
-            
-        Returns:
-        --------
-        baselines : array
-            Baseline values for each breath
-        """
-        baselines = np.zeros(len(breath_segments))
-        
-        for i in range(len(breath_segments)):
-            # Use up to 5 prior breaths for moving average
-            start_breath = max(0, i - self.moving_avg_breaths)
-            
-            if i == 0:
-                # For first breath, use its own start value
-                baselines[i] = breath_segments[i]['baseline_start']
-            else:
-                # Calculate moving average of baseline values from prior breaths
-                prior_baselines = []
-                for j in range(start_breath, i):
-                    # Use the minimum value of each breath as baseline reference
-                    prior_baselines.append(breath_segments[j]['min_value'])
-                
-                if len(prior_baselines) > 0:
-                    baselines[i] = np.mean(prior_baselines)
-                else:
-                    baselines[i] = breath_segments[i]['baseline_start']
-        
-        return baselines
-    
-    def apply_baseline_correction(self, signal_data, breath_segments, baselines):
-        """
-        Apply baseline correction to the signal
-        
-        Parameters:
-        -----------
-        signal_data : array
-            Original signal data
-        breath_segments : list
-            Breath segment information
-        baselines : array
-            Baseline values for each breath
-            
-        Returns:
-        --------
-        corrected_signal : array
-            Baseline-corrected signal
-        """
-        corrected_signal = signal_data.copy()
-        
-        for i, breath in enumerate(breath_segments):
-            start_idx = breath['start_idx']
-            end_idx = breath['end_idx']
-            
-            # Subtract the baseline from this breath segment
-            corrected_signal[start_idx:end_idx] -= baselines[i]
-        
-        return corrected_signal
-    
-    def preprocess_baseline_removal(self, signal_data):
-        """
-        Complete baseline removal preprocessing pipeline
-        
-        Parameters:
-        -----------
-        signal_data : array-like
-            Input RIPflow signal
-        plot_results : bool
-            Whether to plot intermediate results
-            
-        Returns:
-        --------
-        processed_signal : array
-            Baseline-corrected signal
-        breath_info : dict
-            Dictionary containing breath segmentation information
-        valid_mask : array
-            Boolean mask indicating valid regions (excluding long zero-flow periods)
-        """
-        signal_data = np.array(signal_data)
-        
-        # Step 1: Correcting signal polarity
-        is_inverted = self.correct_polarity(signal_data)
-        if is_inverted:
-            corrected_signal = - signal_data
-        else:
-            corrected_signal = signal_data
-        
-        # Step 2: Detecting breath changepoints
-        inspiration_starts = self.detect_breath_changepoints(corrected_signal)
-        if len(inspiration_starts) < 2:
-            # Insufficient breath detections. Returning original signal
-            return corrected_signal, {}, np.ones_like(corrected_signal, dtype=bool)
-        
-        # Step 3: Refining inspiration timing
-        refined_inspirations = self.refine_inspiration_timing(corrected_signal, inspiration_starts)
-        
-        # Step 4: Segmenting individual breaths
-        breath_segments = self.segment_breaths(corrected_signal, refined_inspirations)
-        if len(breath_segments) == 0:
-            # Warning: No valid breath segments found. Returning original signal
-            return corrected_signal, {}, np.ones_like(corrected_signal, dtype=bool)
 
-        # Step 5: Calculating moving baseline
-        baselines = self.calculate_moving_baseline(breath_segments)
-        
-        # Step 6: Applying baseline correction
-        corrected_signal = self.apply_baseline_correction(corrected_signal, breath_segments, baselines)
-        
-        return corrected_signal
+        # Build breath segments
+        breath_segments = [
+            (inspiration_starts[i], inspiration_starts[i + 1])
+            for i in range(len(inspiration_starts) - 1)
+        ]
+        self.breath_segments = breath_segments
+
+        return self.breath_segments
+    
+    # -----------------------------------------------------
+    # 2. Compute baseline per breath
+    # -----------------------------------------------------
+    def compute_breath_baselines(self):
+        baselines = []
+
+        for start, end in self.breath_segments:
+            # Guard against invalid segments
+            if start >= end or start < 0 or end > len(self.signal):
+                baselines.append(np.nan)
+                continue
+
+            seg = self.signal[start:end]
+
+            # Guard against empty or all-NaN segments
+            if seg.size == 0 or np.all(np.isnan(seg)):
+                baselines.append(np.nan)
+            else:
+                baselines.append(np.nanmean(seg))
+
+        self.breath_baselines = np.asarray(baselines)
+        return self.breath_baselines
+
+    # -----------------------------------------------------
+    # 3. Detrend using average of previous N breaths
+    # -----------------------------------------------------
+    def detrend(self):
+        """
+        Subtracts baseline computed as the average
+        of the previous n_prior breath baselines.
+        """
+        n_prior = 5 # look at 5 previosu breaths
+        detrended = self.signal.copy()
+
+        for i, (start, end) in enumerate(self.breath_segments):
+            if i < n_prior:
+                baseline = np.nanmean(self.breath_baselines[:i+1])
+            else:
+                baseline = np.nanmean(self.breath_baselines[i-n_prior:i])
+
+            detrended[start:end] -= baseline
+        self.detrended_signal = detrended
+        return detrended
+    
+    # Apply the three steps 
+    def preprocess_airflow(self):
+        self.detect_inspiration_starts()
+        self.compute_breath_baselines()
+        self.detrend()
+        return self.detrended_signal
+    
+
+def airflow_preprocess(airflow, fs, dataset):
+    if correct_polarity(airflow, fs, dataset, min_breath_duration=1.0):
+        airflow = -airflow
+
+    doris = DORISDeClipper(lambda_smooth=1.0, lambda_energy=0.01)
+    airflow_declipped, clipped_mask = doris.preprocess_airflow(
+        airflow,
+        threshold_percentile=99.0  
+    )
+
+    breath_detrend = BreathDetrender(airflow_declipped, fs=fs)
+    airflow_detrended = breath_detrend.preprocess_airflow()
+
+    return airflow_detrended

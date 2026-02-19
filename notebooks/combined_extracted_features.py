@@ -3,13 +3,15 @@ import pandas as pd
 import math
 
 # === CONFIG ===
-dataset_name = "hsp_mgb" 
-run_date = "20260128"
-feature = "aasm"
-results_path = f"/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/{dataset_name}/run_{run_date}_{feature}/"
+dataset_name = "shhs_ses-1" 
+run_date = "20260210"
+#feature = "vb"
+#results_path = f"/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/{dataset_name}/run_{run_date}_{feature}/"
+results_path = f"/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/{dataset_name}/run_{run_date}/"
 print(results_path)
 # results_path = "/wynton/group/andrews/data/PSG_Pipeline_Outputs/extracted_features/shhs_ses-1/run_20251013"
-output_final = os.path.join(results_path, f"{dataset_name}_{feature}_all.csv")
+#output_final = os.path.join(results_path, f"{dataset_name}_{feature}_all.csv")
+output_final = os.path.join(results_path, f"{dataset_name}_all.csv")
 sub_id_col = "sub_id"
 final_df = None
 
@@ -78,21 +80,21 @@ if final_df is None:
     final_df = pd.read_csv(output_final)
     print(f"[INFO] Number of row in combined all is {len(final_df)}")
 
-# Identify stage types
-stage_types = ["WN", "REM", "N2N3"]
+# # Identify stage types
+# stage_types = ["WN", "REM", "N2N3"]
 
-# Split columns for each stage type, always include 'sub_id'
-for stage in stage_types:
-    # Select columns: sub_id + columns ending with f"@{stage}"
-    stage_cols = [col for col in final_df.columns if col.endswith(f"@{stage}")]
-    stage_cols = [sub_id_col] + stage_cols
+# # Split columns for each stage type, always include 'sub_id'
+# for stage in stage_types:
+#     # Select columns: sub_id + columns ending with f"@{stage}"
+#     stage_cols = [col for col in final_df.columns if col.endswith(f"@{stage}")]
+#     stage_cols = [sub_id_col] + stage_cols
     
-    stage_df = final_df[stage_cols]
+#     stage_df = final_df[stage_cols]
     
-    # Sort by sub_id
-    stage_df = stage_df.sort_values(by=sub_id_col).reset_index(drop=True)
+#     # Sort by sub_id
+#     stage_df = stage_df.sort_values(by=sub_id_col).reset_index(drop=True)
     
-    # Save to CSV
-    stage_csv_path = os.path.join(results_path, f"{dataset_name}_{feature}_{stage}.csv")
-    stage_df.to_csv(stage_csv_path, index=False)
-    print(f"[INFO] Saved {stage_csv_path} with {stage_df.shape[1]-1} stage columns")
+#     # Save to CSV
+#     stage_csv_path = os.path.join(results_path, f"{dataset_name}_{feature}_{stage}.csv")
+#     stage_df.to_csv(stage_csv_path, index=False)
+#     print(f"[INFO] Saved {stage_csv_path} with {stage_df.shape[1]-1} stage columns")

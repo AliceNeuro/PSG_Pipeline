@@ -41,5 +41,5 @@ analysis:
 run:
   verbose: false
   parallel: true
-  num_workers: 16
+  num_workers: 4
   logging_level: info  # debug / info / warning / error        
