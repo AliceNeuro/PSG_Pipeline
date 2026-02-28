@@ -12,7 +12,7 @@ So you need to:
 ### 1️⃣ Clone the repository
 
 ```bash
-git clone https://github.com/AlbrechtAlice/PSG_Pipeline.git
+git clone https://github.com/AliceNeuro/PSG_Pipeline.git
 ```
 
 (You can also use SSH if configured.)
